@@ -3,10 +3,7 @@
  */
 define([
     'de264/queuebuffer',
-    'de264/sps',
-    'de264/pps',
-    'de264/slice'
-], function(_queuebuffer, _sps, _pps, _slice) {
+], function(_queuebuffer) {
 
     function Nal(buf, decoder) {
         this.buf = buf;
@@ -29,36 +26,13 @@ define([
             var numBytesInRBSP = 0;
             var numBytesInNALunit = this.buf.byteLength;
             for (var i = 0; i < numBytesInNALunit; i++) {
-                if ((i + 2 < numBytesInNALunit) &&
-                    (this.dv.getUint8(i) === 0x00 && this.dv.getUint8(i+1) === 0x00 && this.dv.getUint8(i) === 0x03)) {
-                    i += 3;
-                    numBytesInRBSP += 2;
-                } else {
-                    rbsp_dv.setUint8(numBytesInRBSP++, this.dv.getUint8(i));
+                if ((i >= 2) &&
+                    (this.dv.getUint8(i - 2) === 0x00 && this.dv.getUint8(i - 1) === 0x00 && this.dv.getUint8(i) === 0x03)) {
+                    i++;
                 }
+                rbsp_dv.setUint8(numBytesInRBSP++, this.dv.getUint8(i));
             }
-            this.rbsp = rbsp.slice(1);
-            
-            switch (this.nal_unit_type) {
-                case 7: /* sps */
-                    var sps = _sps.create(this.rbsp);
-                    sps.parse();
-                    this.sps = sps;
-                    break;
-                case 8: /* pps */
-                    var pps = _pps.create(this.rbsp);
-                    pps.parse();
-                    this.pps = pps;
-                    break;
-                case 5: /* Coded slice of an IDR picture */
-                    var slice = _slice.create(this.rbsp, this.decoder);
-                    slice.nal = this;
-                    slice.parse();
-                    console.log(slice);
-                    break;
-                default:
-                    break;
-            }
+            this.rbsp = rbsp.slice(1, numBytesInRBSP);
         },
     };
 

@@ -2,6 +2,14 @@
  * Created by gd on 16/5/9.
  */
 define(function() {
+
+    var codedBlockPatternIntra4x4 = [
+        47,31,15,0,23,27,29,30,7,11,13,14,39,43,45,46,16,3,5,10,12,19,21,26,28,35,
+        37,42,44,1,2,4,8,17,18,20,24,6,9,22,25,32,33,34,36,40,38,41];
+
+    var codedBlockPatternInter = [
+        0,16,1,2,4,8,32,3,5,10,12,15,47,7,11,13,14,6,9,31,35,37,42,44,33,34,36,40,
+        39,43,45,46,17,18,20,24,19,21,26,28,23,27,29,30,22,25,38,41];
     
     function Queuebuffer(buf) {
         this.buf = buf;
@@ -18,7 +26,7 @@ define(function() {
             var out = 0;
             var needBytes = Math.floor((this.bitindex + numBits - 1) / 8) - Math.floor(this.bitindex / 8) + 1;
             var bytes = new Array(needBytes);
-            for (var i = 0; i < needBytes; i++) { console.log(this.buf.byteLength, this.bitindex);
+            for (var i = 0; i < needBytes; i++) {
                 bytes[i] = this.dv.getUint8(bytepos + i);
             }
             
@@ -63,6 +71,14 @@ define(function() {
                 return val ^= 0x1;
             }
         },
+        deqMe: function(isIntra) {
+            code = this.deqUe();
+            if (isIntra) {
+                return codedBlockPatternIntra4x4[code];
+            } else {
+                return codedBlockPatternInter[code];
+            }
+        },
         isAligned: function() {
             return this.bitindex % 8 === 0;
         },
@@ -71,7 +87,7 @@ define(function() {
             if (bits === 0) {
                 return false;
             }
-            if ((bits > 8) || (this.getBits(bits) >> (32 - bits)) != (1 << (bits - 1))) {
+            if ((bits > 8) || (this.getBits(bits) != (1 << (bits - 1)))) {
                 return true;
             } else {
                 return false;

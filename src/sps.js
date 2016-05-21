@@ -16,51 +16,35 @@ define(['de264/queuebuffer'], function(_queuebuffer) {
             this.constraint_set0_flag = qb.deqBits(1);
             this.constraint_set1_flag = qb.deqBits(1);
             this.constraint_set2_flag = qb.deqBits(1);
-            this.constraint_set3_flag = qb.deqBits(1);
 
-            /* reserved_zero_4bits */
-            qb.deqBits(4);
+            /* reserved_zero_5bits */
+            qb.deqBits(5);
 
             this.level_idc = qb.deqBits(8);
-            if (this.profile_idc === 100 || this.profile_idc === 110 || this.profile_idc === 122 || this.profile_idc === 144) {
-                this.chroma_format_idc = qb.deqUe();
-                if (this.chroma_format_idc === 3) {
-                    this.residual_colour_transform_flag = qb.deqBits(1);
-                }
-                this.bit_depth_luma_minus8 = qb.deqUe();
-                this.bit_depth_chroma_minus8 = qb.deqUe();
-                this.qpprime_y_zero_transform_bypass_flag = qb.deqBits(1);
-                this.seq_scaling_matrix_present_flag = qb.deqBits(1);
-                if (this.seq_scaling_matrix_present_flag) {
-                    this.seq_scaling_list_present_flag = [];
-                    for (var i = 0; i < 8; i++) {
-                        this.seq_scaling_list_present_flag[i] = qb.deqBits(1);
-                        if (this.seq_scaling_list_present_flag[i]) {
-                            if (i < 6) {
-                                // TODO
-                            } else {
-                                // TODO
-                            }
-                        }
-                    }
-                }
-            }
+            this.seq_parameter_set_id = qb.deqUe();
+            this.chroma_format_idc = 1;
             this.log2_max_frame_num_minus4 = qb.deqUe();
             this.pic_order_cnt_type = qb.deqUe();
             if (this.pic_order_cnt_type === 0) {
                 this.log2_max_pic_order_cnt_lsb_minus4 = qb.deqUe();
             } else if (this.pic_order_cnt_type === 1) {
                 this.delta_pic_order_always_zero_flag = qb.deqBits(1);
-                this.offset_for_non_ref_pic = qb.deqUe();
+                this.offset_for_non_ref_pic = qb.deqSe();
+                this.offset_for_top_to_bottom_field = qb.deqSe();
+                this.num_ref_frames_in_pic_order_cnt_cycle = qb.deqUe();
+                this.offset_for_ref_frame = [];
+                for (var i = 0; i < this.num_ref_frames_in_pic_order_cnt_cycle; i++) {
+                    this.offset_for_ref_frame[i] = qb.deqSe();
+                }
             }
             this.num_ref_frames = qb.deqUe();
             this.gaps_in_frame_num_value_allowed_flag = qb.deqBits(1);
             this.pic_width_in_mbs_minus1 = qb.deqUe();
             this.pic_height_in_map_units_minus1 = qb.deqUe();
+
+            /* frame_mbs_only_flag shall be 1 for baseline profile */
             this.frame_mbs_only_flag = qb.deqBits(1);
-            if (!this.frame_mbs_only_flag) {
-                this.mb_adaptive_frame_field_flag = qb.deqBits(1);
-            }
+
             this.direct_8x8_inference_flag = qb.deqBits(1);
             this.frame_cropping_flag = qb.deqBits(1);
             if (this.frame_cropping_flag) {
@@ -108,11 +92,39 @@ define(['de264/queuebuffer'], function(_queuebuffer) {
                 }
                 this.nal_hrd_parameters_present_flag = qb.deqBits(1);
                 if (this.nal_hrd_parameters_present_flag) {
-                    // todo
+                    this.cpb_cnt_minus1 = qb.deqUe();
+                    this.bit_rate_scale = qb.deqBits(4);
+                    this.cpb_size_scale = qb.deqBits(4);
+                    this.bit_rate_value_minus1 = [];
+                    this.cpb_size_value_minus1 = [];
+                    this.cbr_flag = [];
+                    for (var SchedSelIdx = 0; SchedSelIdx <= this.cpb_cnt_minus1; SchedSelIdx++) {
+                        this.bit_rate_value_minus1[SchedSelIdx] = qb.deqUe();
+                        this.cpb_size_value_minus1[SchedSelIdx] = qb.deqUe();
+                        this.cbr_flag[SchedSelIdx] = qb.deqBits(1);
+                    }
+                    this.initial_cpb_removal_delay_length_minus1 = qb.deqBits(5);
+                    this.cpb_removal_delay_length_minus1 = qb.deqBits(5);
+                    this.dpb_output_delay_length_minus1 = qb.deqBits(5);
+                    this.time_offset_length = qb.deqBits(5);
                 }
                 this.vcl_hrd_parameters_present_flag = qb.deqBits(1);
                 if (this.vcl_hrd_parameters_present_flag) {
-                    // todo
+                    this.cpb_cnt_minus1 = qb.deqUe();
+                    this.bit_rate_scale = qb.deqBits(4);
+                    this.cpb_size_scale = qb.deqBits(4);
+                    this.bit_rate_value_minus1 = [];
+                    this.cpb_size_value_minus1 = [];
+                    this.cbr_flag = [];
+                    for (var SchedSelIdx = 0; SchedSelIdx <= this.cpb_cnt_minus1; SchedSelIdx++) {
+                        this.bit_rate_value_minus1[SchedSelIdx] = qb.deqUe();
+                        this.cpb_size_value_minus1[SchedSelIdx] = qb.deqUe();
+                        this.cbr_flag[SchedSelIdx] = qb.deqBits(1);
+                    }
+                    this.initial_cpb_removal_delay_length_minus1 = qb.deqBits(5);
+                    this.cpb_removal_delay_length_minus1 = qb.deqBits(5);
+                    this.dpb_output_delay_length_minus1 = qb.deqBits(5);
+                    this.time_offset_length = qb.deqBits(5);
                 }
                 if (this.nal_hrd_parameters_present_flag || this.vcl_hrd_parameters_present_flag) {
                     this.low_delay_hrd_flag = qb.deqBits(1);
@@ -131,6 +143,7 @@ define(['de264/queuebuffer'], function(_queuebuffer) {
             }
 
             console.log(this);
+            
         }
     };
     

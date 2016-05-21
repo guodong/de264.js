@@ -14,6 +14,8 @@ define(['de264/queuebuffer'], function(_queuebuffer) {
             var qb = _queuebuffer.create(this.buf);
             this.pic_parameter_set_id = qb.deqUe();
             this.seq_parameter_set_id = qb.deqUe();
+
+            /* entropy_coding_mode_flag, shall be 0 for baseline profile */
             this.entropy_coding_mode_flag = qb.deqBits(1);
             this.pic_order_present_flag = qb.deqBits(1);
             this.num_slice_groups_minus1 = qb.deqUe();
@@ -45,6 +47,9 @@ define(['de264/queuebuffer'], function(_queuebuffer) {
                         while (val >> j)
                             j++;
                         j--;
+                        if ((1 << j) < val) {
+                            j++;
+                        }
                         this.slice_group_id[i] = qb.deqBits(j);
                     }
                 }
@@ -52,6 +57,8 @@ define(['de264/queuebuffer'], function(_queuebuffer) {
 
             this.num_ref_idx_l0_active_minus1 = qb.deqUe();
             this.num_ref_idx_l1_active_minus1 = qb.deqUe();
+
+            /* weighted_pred_flag, this shall be 0 for baseline profile */
             this.weighted_pred_flag = qb.deqBits(1);
             this.weighted_bipred_idc = qb.deqBits(2);
             this.pic_init_qp_minus26 = qb.deqSe();
