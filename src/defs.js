@@ -36,8 +36,7 @@ define(function() {
         MB_CURR: MB_CURR,
         MB_NA: MB_NA,
         
-        /* coeff_token map */
-        COEFF_TO: 
+        
 
         /* neighbour maps */
         NA_MAP: [

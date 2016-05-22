@@ -93,7 +93,7 @@ define([
             for (var i = 0; i < picSizeInMbs; i++) {
                 this.mbs[i] = {};
                 if (col) {
-                    this.mbs[i].mbA = this.mbs[i - 1]
+                    this.mbs[i].mbA = this.mbs[i - 1];
                 } else {
                     this.mbs[i].mbA = null;
                 }
