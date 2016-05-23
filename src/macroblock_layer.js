@@ -397,6 +397,227 @@ define([
         0x0006FC00: [3, 16]
     };
 
+    var total_zeros_map = [{
+        /* totalCoeff == 1 */
+        0x00018000: 0,
+        0x00036000: 1,
+        0x00034000: 2,
+        0x00043000: 3,
+        0x00042000: 4,
+        0x00051800: 5,
+        0x00051000: 6,
+        0x00060C00: 7,
+        0x00060800: 8,
+        0x00070600: 9,
+        0x00070400: 10,
+        0x00080300: 11,
+        0x00080200: 12,
+        0x00090180: 13,
+        0x00090100: 14,
+        0x00090080: 15
+    }, {
+        /* totalCoeff == 2 */
+        0x0003E000: 0,
+        0x0003C000: 1,
+        0x00039000: 2,
+        0x00038000: 3,
+        0x00036000: 4,
+        0x00045000: 5,
+        0x00044000: 6,
+        0x00043000: 7,
+        0x00042000: 8,
+        0x00051800: 9,
+        0x00051000: 10,
+        0x00060C00: 11,
+        0x00060800: 12,
+        0x00060400: 13,
+        0x00060000: 14
+    }, {
+        /* totalCoeff == 3 */
+        0x00045000: 0,
+        0x0003E000: 1,
+        0x0003C000: 2,
+        0x0003A000: 3,
+        0x00044000: 4,
+        0x00043000: 5,
+        0x00038000: 6,
+        0x00036000: 7,
+        0x00042000: 8,
+        0x00051800: 9,
+        0x00051000: 10,
+        0x00060400: 11,
+        0x00050800: 12,
+        0x00060000: 13,
+    }, {
+        /* totalCoeff == 4 */
+        0x00051800: 0,
+        0x0003E000: 1,
+        0x00045000: 2,
+        0x00044000: 3,
+        0x0003C000: 4,
+        0x0003A000: 5,
+        0x00038000: 6,
+        0x00043000: 7,
+        0x00036000: 8,
+        0x00042000: 9,
+        0x00051000: 10,
+        0x00050800: 11,
+        0x00050000: 12,
+    }, {
+        /* totalCoeff == 5 */
+        0x00045000: 0,
+        0x00044000: 1,
+        0x00043000: 2,
+        0x0003E000: 3,
+        0x0003C000: 4,
+        0x0003A000: 5,
+        0x00038000: 6,
+        0x00036000: 7,
+        0x00042000: 8,
+        0x00050800: 9,
+        0x00041000: 10,
+        0x00050000: 11,
+    }, {
+        /* totalCoeff == 6 */
+        0x00060400: 0,
+        0x00050800: 1,
+        0x0003E000: 2,
+        0x0003C000: 3,
+        0x0003A000: 4,
+        0x00038000: 5,
+        0x00036000: 6,
+        0x00034000: 7,
+        0x00041000: 8,
+        0x00032000: 9,
+        0x00060000: 10,
+    }, {
+        /* totalCoeff == 7 */
+        0x00060400: 0,
+        0x00050800: 1,
+        0x0003A000: 2,
+        0x00038000: 3,
+        0x00036000: 4,
+        0x0002C000: 5,
+        0x00034000: 6,
+        0x00041000: 7,
+        0x00032000: 8,
+        0x00060000: 9,
+    }, {
+        /* totalCoeff == 8 */
+        0x00060400: 0,
+        0x00041000: 1,
+        0x00050800: 2,
+        0x00036000: 3,
+        0x0002C000: 4,
+        0x00028000: 5,
+        0x00034000: 6,
+        0x00032000: 7,
+        0x00060000: 8,
+    }, {
+        /* totalCoeff == 9 */
+        0x00060400: 0,
+        0x00060000: 1,
+        0x00041000: 2,
+        0x0002C000: 3,
+        0x00028000: 4,
+        0x00032000: 5,
+        0x00024000: 6,
+        0x00050800: 7,
+    }, {
+        /* totalCoeff == 10 */
+        0x00050800: 0,
+        0x00050000: 1,
+        0x00032000: 2,
+        0x0002C000: 3,
+        0x00028000: 4,
+        0x00024000: 5,
+        0x00041000: 6,
+    }, {
+        /* totalCoeff == 11 */
+        0x00040000: 0,
+        0x00041000: 1,
+        0x00032000: 2,
+        0x00034000: 3,
+        0x00018000: 4,
+        0x00036000: 5,
+    }, {
+        /* totalCoeff == 12 */
+        0x00040000: 0,
+        0x00041000: 1,
+        0x00024000: 2,
+        0x00018000: 3,
+        0x00032000: 4,
+    }, {
+        /* totalCoeff == 13 */
+        0x00030000: 0,
+        0x00032000: 1,
+        0x00018000: 2,
+        0x00024000: 3,
+    }, {
+        /* totalCoeff == 14 */
+        0x00020000: 0,
+        0x00024000: 1,
+        0x00018000: 2,
+    }, {
+        /* totalCoeff == 15 */
+        0x00020000: 0,
+        0x00024000: 1,
+        0x00018000: 2,
+    }];
+    
+    var run_before_map = [
+        {
+            0x00018000: 0,
+            0x00010000: 1,
+        }, {
+            0x00018000: 0,
+            0x00024000: 1,
+            0x00020000: 2,
+        }, {
+            0x0002C000: 0,
+            0x00028000: 1,
+            0x00024000: 2,
+            0x00020000: 3,
+        }, {
+            0x0002C000: 0,
+            0x00028000: 1,
+            0x00024000: 2,
+            0x00032000: 3,
+            0x00030000: 4,
+        }, {
+            0x0002C000: 0,
+            0x00028000: 1,
+            0x00036000: 2,
+            0x00034000: 3,
+            0x00033000: 4,
+            0x00030000: 5,
+        }, {
+            0x0002C000: 0,
+            0x00030000: 1,
+            0x00032000: 2,
+            0x00036000: 3,
+            0x00034000: 4,
+            0x0003A000: 5,
+            0x00038000: 6,
+        }, {
+            0x0003E000: 0,
+            0x0003C000: 1,
+            0x0003A000: 2,
+            0x00038000: 3,
+            0x00036000: 4,
+            0x00034000: 5,
+            0x00032000: 6,
+            0x00041000: 7,
+            0x00050800: 8,
+            0x00060400: 9,
+            0x00070200: 10,
+            0x00080100: 11,
+            0x00090080: 12,
+            0x000A0040: 13,
+            0x000B0020: 14,
+        }
+    ];
+
     function decodeCoeffToken(qb, nc) {
         var state = 0x00000000;
         if (nc < 2) {
@@ -413,14 +634,182 @@ define([
         return null;
     }
 
+    function decodeLevelPrefix(qb) {
+        for (var i = 0; i < 16; i++) {
+            var bit = qb.deqBits(1);
+            if (bit) {
+                return i;
+            }
+        }
+        return null;
+    }
+
+    function decodeTotalZeros(qb, totalCoeff, isChromaDC) {
+        var state = 0x00000000;
+        if (!isChromaDC) {
+            for (var i = 0; i < 17 - totalCoeff; i++) {
+                var bit = qb.deqBits(1);
+                state += 1 << 16;
+                state |= bit << (15 - i);
+                if (total_zeros_map[totalCoeff - 1][state]) {
+                    return total_zeros_map[totalCoeff - 1][state];
+                }
+            }
+        } else {
+            if (totalCoeff === 1) {
+                for (var i = 0; i < 3; i++) {
+                    var bit = qb.deqBits(1);
+                    if (bit) {
+                        return i;
+                    }
+                }
+                return 3;
+            } else if (totalCoeff === 2) {
+                for (var i = 0; i < 2; i++) {
+                    var bit = qb.deqBits(1);
+                    if (bit) {
+                        return i;
+                    }
+                }
+                return 2;
+            } else if (totalCoeff === 3) {
+                for (var i = 0; i < 1; i++) {
+                    var bit = qb.deqBits(1);
+                    if (bit) {
+                        return i;
+                    }
+                }
+                return 1;
+            }
+        }
+    }
+
+    function decodeRunBefore(qb, zerosLeft) {
+        var state = 0x00000000;
+        var loops = 0;
+        switch (zerosLeft) {
+            case 1:
+                loops = 1;
+                break;
+            case 2:
+            case 3:
+                loops = 2;
+                break;
+            case 4:
+            case 5:
+            case 6:
+                loops = 3;
+                break;
+            default:
+                loops = 11;
+                break;
+        }
+        if (zerosLeft <= 6) {
+            for (var i = 0; i < loops; i++) {
+                var bit = qb.deqBits(1);
+                state += 1 << 16;
+                state |= bit << (15 - i);
+                if (run_before_map[zerosLeft - 1][state]) {
+                    return run_before_map[zerosLeft - 1][state];
+                }
+            }
+        } else {
+            for (var i = 0; i < loops; i++) {
+                var bit = qb.deqBits(1);
+                state += 1 << 16;
+                state |= bit << (15 - i);
+                if (run_before_map[6][state]) {
+                    return run_before_map[6][state];
+                }
+            }
+        }
+        
+    }
+
     function residual_block_cavlc(nc, coeffLevel, maxNumCoeff) {
 
-        //var coeff_token = this.qb.deqc
+        var params = decodeCoeffToken(this.qb, nc);
+        var suffixLength = 0;
+        var trailing_ones_sign_flag = 0;
+        var level = [];
+        var level_suffix;
+        if (params[1] > 0) {
+            if (params[1] > 10 && params[0] < 3) {
+                suffixLength = 1;
+            } else {
+                suffixLength = 0;
+            }
+            for (var i = 0; i < params[1]; i++) {
+                if (i < params[0]) {
+                    trailing_ones_sign_flag = this.qb.deqBits(1);
+                    level[i] = 1 - 2 * trailing_ones_sign_flag;
+                } else {
+                    var level_prefix = decodeLevelPrefix(this.qb);
+                    var levelCode = (level_prefix << suffixLength);
+                    if (suffixLength > 0 || level_prefix >= 14) {
+                        var levelSuffixSize;
+                        if (level_prefix === 14 && suffixLength === 0) {
+                            levelSuffixSize = 4;
+                        } else if (level_prefix === 15) {
+                            levelSuffixSize = 12;
+                        } else {
+                            levelSuffixSize = suffixLength;
+                        }
+                        if (levelSuffixSize) {
+                            level_suffix = this.qb.deqBits(levelSuffixSize);
+                        } else {
+                            level_suffix = 0;
+                        }
+                        levelCode += level_suffix;
+                    }
+                    if (level_prefix === 15 && suffixLength === 0) {
+                        levelCode += 15;
+                    }
+                    if (i === params[0] && params[0] < 3) {
+                        levelCode += 2;
+                    }
+                    if (levelCode % 2 === 0) {
+                        level[i] = (levelCode + 2) >> 1;
+                    } else {
+                        level[i] = (-levelCode - 1) >> 1;
+                    }
+                    if (suffixLength === 0) {
+                        suffixLength = 1;
+                    }
+                    if (Math.abs(level[i]) > (3 << (suffixLength - 1)) && suffixLength < 6) {
+                        suffixLength++;
+                    }
+                }
+            }
+            var zerosLeft = 0;
+            if (params[1] < maxNumCoeff) {
+                var total_zeros = decodeTotalZeros(this.qb, params[1], maxNumCoeff === 4);
+                zerosLeft = total_zeros;
+            }
+            var run = [];
+            for (var i = 0; i< params[1]; i++) {
+                if (zerosLeft > 0) {
+                    var run_before = decodeRunBefore(this.qb);
+                    run[i] = run_before;
+                } else {
+                    run[i] = 0;
+                }
+                zerosLeft = zerosLeft - run[i];
+            }
+            run[params[1] - 1] = zerosLeft;
+            var coeffNum = -1;
+            for (var i = params[1] - 1; i >= 0; i--) {
+                coeffNum += run[i] + 1;
+                coeffLevel[coeffNum] = level[i];
+            }
+        }
     }
 
     function residual(mb_type) {
         if (MbPartPredMode(mb_type, this.slice_type) === _defs.PRED_MODE_INTRA16x16) {
-            // TODO
+            var nc = calcNC(this, 0); // why?
+            var Intra16x16DCLevel = [];
+            residual_block_cavlc(nc, Intra16x16DCLevel, 16);
         }
 
         var Intra16x16ACLevel = [];
