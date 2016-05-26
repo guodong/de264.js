@@ -6,136 +6,6 @@ define([
     'de264/defs',
     'de264/queuebuffer'
 ], function(_common, _defs, _queuebuffer) {
-    var MbPartPredMode = function(mb_type, slice_type) {
-        if (_common.isISlice(slice_type)) {
-            if (mb_type === 0) {
-                return _defs.PRED_MODE_INTRA4x4;
-            } else {
-                return _defs.PRED_MODE_INTRA16x16;
-            }
-        } else {
-            return _defs.PRED_MODE_INTER;
-        }
-    };
-    var NumMbPart = function(mb_type) {
-        switch (mb_type) {
-            case _defs.P_L0_16x16:
-            case _defs.P_Skip:
-                return 1;
-            case  _defs.P_L0_L0_16x8:
-            case _defs.P_L0_L0_8x16:
-                return 2;
-            default: /* P_8x8, P_8x8ref0 */
-                return 4;
-
-        }
-    };
-    var NumSubMbPart = function(sub_mb_type) {
-        switch (sub_mb_type) {
-            case 0:
-                return 1;
-            case 1:
-            case 2:
-                return 2;
-            default:
-                return 4;
-        }
-    };
-
-    function sub_mb_pred(mb_type) {
-        var qb = this.qb;
-        this.sub_mb_type = [];
-        for (var mbPartIdx = 0; mbPartIdx < 4; mbPartIdx++) {
-            this.sub_mb_type[mbPartIdx] = qb.deqUe();
-        }
-        this.ref_idx_l0 = [];
-        for (var mbPartIdx = 0; mbPartIdx < 4; mbPartIdx++) { /* SubMbPredMode(sub_mb_type[mbPartIdx]) is Prd_L0 for P slice */
-            if ((this.num_ref_idx_l0_active_minus1 > 0 || this.mb_field_decoding_flag) && mb_type !== _defs.P_8x8ref0 && this.sub_mb_type[mbPartIdx] !== _defs.B_Direct_8x8) { // TODO: SubMbPredMode()
-                this.ref_idx_l0[mbPartIdx] = qb.deqTe(this.num_ref_idx_l0_active_minus1 > 1);
-            }
-        }
-
-        /* SubMbPredMode(sub_mb_type[mbPartIdx]) is Prd_L0 for P slice, so no need to parse ref_idx_l1 */
-
-        this.mvd_l0 = [];
-        for (var mbPartIdx = 0; mbPartIdx < 4; mbPartIdx++) {
-            this.mvd_l0[mbPartIdx] = [];
-            if (this.sub_mb_type[mbPartIdx] !== _defs.B_Direct_8x8) {
-                for (var subMbPartIdx = 0; subMbPartIdx < NumSubMbPart(this.sub_mb_type[mbPartIdx]); subMbPartIdx++) {
-                    this.mvd_l0[mbPartIdx][subMbPartIdx] = [];
-                    for (var compIdx = 0; compIdx < 2; compIdx++) {
-                        this.mvd_l0[mbPartIdx][subMbPartIdx][compIdx] = qb.deqSe();
-                    }
-                }
-            }
-        }
-        /* SubMbPredMode(sub_mb_type[mbPartIdx]) is Prd_L0 for P slice, so no need to parse follow */
-    }
-
-    function mb_pred(mb_type) {
-        var qb = this.qb;
-        switch (MbPartPredMode(mb_type, this.slice.slice_type)) {
-            case _defs.PRED_MODE_INTER:
-                if (this.num_ref_idx_l0_active_minus1 > 0) {
-                    this.ref_idx_l0 = [];
-                    for (var i = NumMbPart(mb_type), j = 0; i--; j++) {
-                        this.ref_idx_l0[j] = qb.deqTe((this.num_ref_idx_l0_active_minus1 > 1));
-                    }
-                }
-                this.mvd_l0 = [];
-                for (var i = NumMbPart(mb_type), j = 0; i--; j++) {
-                    this.mvd_l0[j] = {hor: qb.deqSe(), ver: qb.deqSe()};
-                }
-                break;
-            case _defs.PRED_MODE_INTRA4x4:
-                this.prev_intra4x4_pred_mode_flag = [];
-                this.rem_intra4x4_pred_mode = [];
-                for (var luma4x4BlkIdx = 0; luma4x4BlkIdx < 16; luma4x4BlkIdx++) {
-                    this.prev_intra4x4_pred_mode_flag[luma4x4BlkIdx] = qb.deqBits(1);
-                    if (!this.prev_intra4x4_pred_mode_flag[luma4x4BlkIdx]) {
-                        this.rem_intra4x4_pred_mode[luma4x4BlkIdx] = qb.deqBits(3);
-                    }
-                }
-            /* falls through */
-            case _defs.PRED_MODE_INTRA16x16:
-                this.intra_chroma_pred_mode = qb.deqUe();
-                break;
-        }
-    }
-
-    function calcNC(mb, blockIndex) {
-        var neighbourA = _common.getNeighbourA4x4(blockIndex);
-        var neighbourB = _common.getNeighbourB4x4(blockIndex);
-        var nc = 0;
-
-        if (neighbourA[0] === _defs.MB_CURR && neighbourB[0] === _defs.MB_CURR) {
-            nc = (this.totalCoeff[neighbourA[1]] + this.totalCoeff[neighbourB[1]] + 1) >> 1;
-        } else if (neighbourA[0] === _defs.MB_CURR) {
-            nc = this.totalCoeff[neighbourA[1]];
-            if (_common.isNeighbourAvailable(this, this.mbB)) {
-                nc = (nc + this.mbB.totalCoeff[neighbourB[1]] + 1) >> 1;
-            }
-        } else if (neighbourB[0] === _defs.MB_CURR) {
-            nc = this.totalCoeff[neighbourB[1]];
-            if (_common.isNeighbourAvailable(this, this.mbA)) {
-                nc = (nc + this.mbA.totalCoeff[neighbourA[1]] + 1) >> 1;
-            }
-        } else {
-            var tmp = 0;
-            if (_common.isNeighbourAvailable(this, this.mbA)) {
-                nc = this.mbA.totalCoeff[neighbourA[1]];
-                tmp = 1;
-            }
-            if (_common.isNeighbourAvailable(this.this.mbB)) {
-                if (tmp) {
-                    nc = (nc + his.mbB.totalCoeff[neighbourB[1]] + 1) >> 1;
-                } else {
-                    nc = this.mbB.totalCoeff[neighbourB[1]];
-                }
-            }
-        }
-        return nc;
-    }
 
     var coeff_map_nc_0_2 = {
         0x00018000: [0, 0],
@@ -397,6 +267,23 @@ define([
         0x0006FC00: [3, 16]
     };
 
+    var coeff_map_nc_m1 = {
+        0x00024000: [0, 0],
+        0x00061C00: [0, 1],
+        0x00018000: [1, 1],
+        0x00061000: [0, 2],
+        0x00061800: [1, 2],
+        0x00032000: [2, 2],
+        0x00060C00: [0, 3],
+        0x00070600: [1, 3],
+        0x00070400: [2, 3],
+        0x00061400: [3, 3],
+        0x00060800: [0, 4],
+        0x00080300: [1, 4],
+        0x00080200: [2, 4],
+        0x00070000: [3, 4],
+    };
+
     var total_zeros_map = [{
         /* totalCoeff == 1 */
         0x00018000: 0,
@@ -564,7 +451,7 @@ define([
         0x00024000: 1,
         0x00018000: 2,
     }];
-    
+
     var run_before_map = [
         {
             0x00018000: 0,
@@ -618,6 +505,137 @@ define([
         }
     ];
 
+    var MbPartPredMode = function(mb_type, slice_type) {
+        if (_common.isISlice(slice_type)) {
+            if (mb_type === 0) {
+                return _defs.PRED_MODE_INTRA4x4;
+            } else {
+                return _defs.PRED_MODE_INTRA16x16;
+            }
+        } else {
+            return _defs.PRED_MODE_INTER;
+        }
+    };
+    var NumMbPart = function(mb_type) {
+        switch (mb_type) {
+            case _defs.P_L0_16x16:
+            case _defs.P_Skip:
+                return 1;
+            case  _defs.P_L0_L0_16x8:
+            case _defs.P_L0_L0_8x16:
+                return 2;
+            default: /* P_8x8, P_8x8ref0 */
+                return 4;
+
+        }
+    };
+    var NumSubMbPart = function(sub_mb_type) {
+        switch (sub_mb_type) {
+            case 0:
+                return 1;
+            case 1:
+            case 2:
+                return 2;
+            default:
+                return 4;
+        }
+    };
+
+    function sub_mb_pred(mb_type) {
+        var qb = this.qb;
+        this.sub_mb_type = [];
+        for (var mbPartIdx = 0; mbPartIdx < 4; mbPartIdx++) {
+            this.sub_mb_type[mbPartIdx] = qb.deqUe();
+        }
+        this.ref_idx_l0 = [];
+        for (var mbPartIdx = 0; mbPartIdx < 4; mbPartIdx++) { /* SubMbPredMode(sub_mb_type[mbPartIdx]) is Prd_L0 for P slice */
+            if ((this.num_ref_idx_l0_active_minus1 > 0 || this.mb_field_decoding_flag) && mb_type !== _defs.P_8x8ref0 && this.sub_mb_type[mbPartIdx] !== _defs.B_Direct_8x8) { // TODO: SubMbPredMode()
+                this.ref_idx_l0[mbPartIdx] = qb.deqTe(this.num_ref_idx_l0_active_minus1 > 1);
+            }
+        }
+
+        /* SubMbPredMode(sub_mb_type[mbPartIdx]) is Prd_L0 for P slice, so no need to parse ref_idx_l1 */
+
+        this.mvd_l0 = [];
+        for (var mbPartIdx = 0; mbPartIdx < 4; mbPartIdx++) {
+            this.mvd_l0[mbPartIdx] = [];
+            if (this.sub_mb_type[mbPartIdx] !== _defs.B_Direct_8x8) {
+                for (var subMbPartIdx = 0; subMbPartIdx < NumSubMbPart(this.sub_mb_type[mbPartIdx]); subMbPartIdx++) {
+                    this.mvd_l0[mbPartIdx][subMbPartIdx] = [];
+                    for (var compIdx = 0; compIdx < 2; compIdx++) {
+                        this.mvd_l0[mbPartIdx][subMbPartIdx][compIdx] = qb.deqSe();
+                    }
+                }
+            }
+        }
+        /* SubMbPredMode(sub_mb_type[mbPartIdx]) is Prd_L0 for P slice, so no need to parse follow */
+    }
+
+    function mb_pred(mb_type) {
+        var qb = this.qb;
+        switch (MbPartPredMode(mb_type, this.slice.slice_type)) {
+            case _defs.PRED_MODE_INTER:
+                if (this.num_ref_idx_l0_active_minus1 > 0) {
+                    this.ref_idx_l0 = [];
+                    for (var i = NumMbPart(mb_type), j = 0; i--; j++) {
+                        this.ref_idx_l0[j] = qb.deqTe((this.num_ref_idx_l0_active_minus1 > 1));
+                    }
+                }
+                this.mvd_l0 = [];
+                for (var i = NumMbPart(mb_type), j = 0; i--; j++) {
+                    this.mvd_l0[j] = {hor: qb.deqSe(), ver: qb.deqSe()};
+                }
+                break;
+            case _defs.PRED_MODE_INTRA4x4:
+                this.prev_intra4x4_pred_mode_flag = [];
+                this.rem_intra4x4_pred_mode = [];
+                for (var luma4x4BlkIdx = 0; luma4x4BlkIdx < 16; luma4x4BlkIdx++) {
+                    this.prev_intra4x4_pred_mode_flag[luma4x4BlkIdx] = qb.deqBits(1);
+                    if (!this.prev_intra4x4_pred_mode_flag[luma4x4BlkIdx]) {
+                        this.rem_intra4x4_pred_mode[luma4x4BlkIdx] = qb.deqBits(3);
+                    }
+                }
+            /* falls through */
+            case _defs.PRED_MODE_INTRA16x16:
+                this.intra_chroma_pred_mode = qb.deqUe();
+                break;
+        }
+    }
+
+    function calcNC(blockIndex) {
+        var neighbourA = _common.getNeighbourA4x4(blockIndex);
+        var neighbourB = _common.getNeighbourB4x4(blockIndex);
+        var nc = 0;
+
+        if (neighbourA[0] === _defs.MB_CURR && neighbourB[0] === _defs.MB_CURR) {
+            nc = (this.totalCoeff[neighbourA[1]] + this.totalCoeff[neighbourB[1]] + 1) >> 1;
+        } else if (neighbourA[0] === _defs.MB_CURR) {
+            nc = this.totalCoeff[neighbourA[1]];
+            if (_common.isNeighbourAvailable(this, this.mbB)) {
+                nc = (nc + this.mbB.totalCoeff[neighbourB[1]] + 1) >> 1;
+            }
+        } else if (neighbourB[0] === _defs.MB_CURR) {
+            nc = this.totalCoeff[neighbourB[1]];
+            if (_common.isNeighbourAvailable(this, this.mbA)) {
+                nc = (nc + this.mbA.totalCoeff[neighbourA[1]] + 1) >> 1;
+            }
+        } else {
+            var tmp = 0;
+            if (_common.isNeighbourAvailable(this, this.mbA)) {
+                nc = this.mbA.totalCoeff[neighbourA[1]];
+                tmp = 1;
+            }
+            if (_common.isNeighbourAvailable(this.mbB)) {
+                if (tmp) {
+                    nc = (nc + this.mbB.totalCoeff[neighbourB[1]] + 1) >> 1;
+                } else {
+                    nc = this.mbB.totalCoeff[neighbourB[1]];
+                }
+            }
+        }
+        return nc || 0;
+    }
+
     function decodeCoeffToken(qb, nc) {
         var state = 0x00000000;
         if (nc < 2) {
@@ -625,13 +643,48 @@ define([
                 var bit = qb.deqBits(1);
                 state += 1 << 16;
                 state |= bit << (15 - size);
-                if (coeff_map_nc_0_2[state]) {
-                    return coeff_map_nc_02[state];
+                if (coeff_map_nc_0_2[state] !== undefined) {
+                    return coeff_map_nc_0_2[state];
+                }
+            }
+        } else if (2 <= nc && nc < 4) {
+            for (var size = 0; size < 16; size++) {
+                var bit = qb.deqBits(1);
+                state += 1 << 16;
+                state |= bit << (15 - size);
+                if (coeff_map_nc_2_4[state] !== undefined) {
+                    return coeff_map_nc_2_4[state];
+                }
+            }
+        } else if (4 <= nc && nc < 8) {
+            for (var size = 0; size < 10; size++) {
+                var bit = qb.deqBits(1);
+                state += 1 << 16;
+                state |= bit << (15 - size);
+                if (coeff_map_nc_4_8[state] !== undefined) {
+                    return coeff_map_nc_4_8[state];
+                }
+            }
+        } else if (8 <= nc) {
+            for (var size = 0; size < 6; size++) {
+                var bit = qb.deqBits(1);
+                state += 1 << 16;
+                state |= bit << (15 - size);
+                if (coeff_map_nc_8[state] !== undefined) {
+                    return coeff_map_nc_8[state];
+                }
+            }
+        } else if (nc === -1) {
+            for (var size = 0; size < 8; size++) {
+                var bit = qb.deqBits(1);
+                state += 1 << 16;
+                state |= bit << (15 - size);
+                if (coeff_map_nc_m1[state] !== undefined) {
+                    return coeff_map_nc_m1[state];
                 }
             }
         }
 
-        return null;
     }
 
     function decodeLevelPrefix(qb) {
@@ -651,7 +704,7 @@ define([
                 var bit = qb.deqBits(1);
                 state += 1 << 16;
                 state |= bit << (15 - i);
-                if (total_zeros_map[totalCoeff - 1][state]) {
+                if (total_zeros_map[totalCoeff - 1][state] !== undefined) {
                     return total_zeros_map[totalCoeff - 1][state];
                 }
             }
@@ -704,12 +757,13 @@ define([
                 loops = 11;
                 break;
         }
+
         if (zerosLeft <= 6) {
             for (var i = 0; i < loops; i++) {
                 var bit = qb.deqBits(1);
                 state += 1 << 16;
                 state |= bit << (15 - i);
-                if (run_before_map[zerosLeft - 1][state]) {
+                if (run_before_map[zerosLeft - 1][state] !== undefined) {
                     return run_before_map[zerosLeft - 1][state];
                 }
             }
@@ -718,7 +772,7 @@ define([
                 var bit = qb.deqBits(1);
                 state += 1 << 16;
                 state |= bit << (15 - i);
-                if (run_before_map[6][state]) {
+                if (run_before_map[6][state] !== undefined) {
                     return run_before_map[6][state];
                 }
             }
@@ -786,6 +840,7 @@ define([
                 var total_zeros = decodeTotalZeros(this.qb, params[1], maxNumCoeff === 4);
                 zerosLeft = total_zeros;
             }
+
             var run = [];
             for (var i = 0; i< params[1]; i++) {
                 if (zerosLeft > 0) {
@@ -803,34 +858,41 @@ define([
                 coeffLevel[coeffNum] = level[i];
             }
         }
+        return params[1];
     }
 
     function residual(mb_type) {
-        if (MbPartPredMode(mb_type, this.slice_type) === _defs.PRED_MODE_INTRA16x16) {
-            var nc = calcNC(this, 0); // why?
+        if (MbPartPredMode(mb_type, this.slice.slice_type) === _defs.PRED_MODE_INTRA16x16) {
+            var nc = calcNC.call(this, 0); // why?
             var Intra16x16DCLevel = [];
-            residual_block_cavlc(nc, Intra16x16DCLevel, 16);
+            var tc = residual_block_cavlc.call(this, nc, Intra16x16DCLevel, 16);
+            this.totalCoeff[24] = tc;
         }
 
         var Intra16x16ACLevel = [];
         var LumaLevel = [];
+        this.LumaLevel = LumaLevel;
         for (var i8x8 = 0; i8x8 < 4; i8x8++) {
             for (var i4x4 = 0; i4x4 < 4; i4x4++) {
                 if (this.CodedBlockPattenLuma & (1 << i8x8)) {
-                    var nc = calcNC(this, 4 * i8x8 + i4x4);
+                    var nc = calcNC.call(this, 4 * i8x8 + i4x4);
                     if (MbPartPredMode(mb_type, this.slice.slice_type) === _defs.PRED_MODE_INTRA16x16) {
                         Intra16x16ACLevel[i8x8 * 4 + i4x4] = [];
-                        residual_block_cavlc.call(this, nc, Intra16x16ACLevel[i8x8 * 4 + i4x4], 15);
+                        var tc = residual_block_cavlc.call(this, nc, Intra16x16ACLevel[i8x8 * 4 + i4x4], 15);
+                        this.totalCoeff[i8x8 * 4 + i4x4] = tc;
                     } else {
                         LumaLevel[i8x8 * 4 + i4x4] = [];
-                        residual_block_cavlc.call(this, nc, LumaLevel[i8x8 * 4 + i4x4], 16);
+                        var tc = residual_block_cavlc.call(this, nc, LumaLevel[i8x8 * 4 + i4x4], 16);
+                        this.totalCoeff[i8x8 * 4 + i4x4] = tc;
                     }
                 } else {
                     if (MbPartPredMode(mb_type, this.slice.slice_type) === _defs.PRED_MODE_INTRA16x16) {
+                        Intra16x16ACLevel[i8x8 * 4 + i4x4] = [];
                         for (var i = 0; i < 15; i++) {
                             Intra16x16ACLevel[i8x8 * 4 + i4x4][i] = 0;
                         }
                     } else {
+                        LumaLevel[i8x8 * 4 + i4x4] = [];
                         for (var i = 0; i < 16; i++) {
                             LumaLevel[i8x8 * 4 + i4x4][i] = 0;
                         }
@@ -840,29 +902,37 @@ define([
         }
 
         var ChromaDCLevel = [];
+        var idx = 25;
         for (var iCbCr = 0; iCbCr < 2; iCbCr++) {
             ChromaDCLevel[iCbCr] = [];
             if (this.CodedBlockPatternChroma & 3) {
-                residual_block_cavlc(ChromaDCLevel[iCbCr], 4);
+                var tc = residual_block_cavlc.call(this, -1, ChromaDCLevel[iCbCr], 4);
+                this.totalCoeff[idx] = tc;
             } else {
                 for (var i = 0; i < 4; i++) {
                     ChromaDCLevel[iCbCr][i] = 0;
                 }
             }
+            idx++;
         }
 
         var ChromaACLevel = [];
+        var idx = 16;
         for (var iCbCr = 0; iCbCr < 2; iCbCr++) {
             ChromaACLevel[iCbCr] = [];
             for (var i4x4 = 0; i4x4 < 4; i4x4++) {
                 ChromaACLevel[iCbCr][i4x4] = [];
                 if (this.CodedBlockPatternChroma & 2) {
-                    residual_block_cavlc(ChromaACLevel[iCbCr][i4x4], 15);
+                    var nc = calcNC.call(this, idx); // problem
+                    var tc = residual_block_cavlc.call(this, nc, ChromaACLevel[iCbCr][i4x4], 15);
+                    this.totalCoeff[idx] = tc;
                 } else {
                     for (var i = 0; i < 15; i++) {
                         ChromaACLevel[iCbCr][i4x4][i] = 0;
                     }
+                    this.totalCoeff[idx] = 0;
                 }
+                idx++;
             }
         }
     }
@@ -903,9 +973,17 @@ define([
                     this.CodedBlockPattenLuma = this.coded_block_pattern % 16;
                     this.CodedBlockPatternChroma = Math.floor(this.coded_block_pattern / 16);
                 } else {
-                    if (this.mb_type >= 5 && this.mb_type <= 8) {
+                    if (this.mb_type <= 12) {
+                        this.CodedBlockPattenLuma = 0;
+                    } else {
                         this.CodedBlockPattenLuma = 15;
+                    }
+                    if ((this.mb_type >= 1 && this.mb_type <= 4) || (this.mb_type >= 13 && this.mb_type <= 16)) {
+                        this.CodedBlockPatternChroma = 0;
+                    } else if ((this.mb_type >= 5 && this.mb_type <= 8) || (this.mb_type >= 17 && this.mb_type <= 20)) {
                         this.CodedBlockPatternChroma = 1;
+                    } else if ((this.mb_type >= 9 && this.mb_type <= 12) || (this.mb_type >= 21 && this.mb_type <= 24)) {
+                        this.CodedBlockPatternChroma = 2;
                     }
                 }
                 if (this.coded_block_pattern || MbPartPredMode(this.mb_type, this.slice.slice_type) === _defs.PRED_MODE_INTRA16x16) {

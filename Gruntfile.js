@@ -27,12 +27,28 @@ module.exports = function(grunt) {
                         endFile: 'src/end.frag'
                     }
                 }
+            },
+            debug: {
+                options: {
+                    baseUrl: 'src',
+                    paths: {
+                        de264: './'
+                    },
+                    include: ['main'],
+                    name: '../bower_components/almond/almond',
+                    out: 'build/de264.min.js',
+                    wrap: {
+                        startFile: 'src/begin.frag',
+                        endFile: 'src/end.frag'
+                    },
+                    optimize: "none"
+                }
             }
         },
         watch: {
             src: {
                 files: ['src/**'],
-                tasks: ['jshint', 'requirejs']
+                tasks: ['jshint', 'requirejs:debug']
             }
         },
         connect: {
@@ -50,7 +66,7 @@ module.exports = function(grunt) {
     grunt.loadNpmTasks('grunt-contrib-connect');
 
     // Default task(s).
-    grunt.registerTask('default', ['jshint', 'requirejs']);
+    grunt.registerTask('default', ['jshint', 'requirejs:compile']);
     grunt.registerTask('test', ['connect', 'watch']);
 
 };

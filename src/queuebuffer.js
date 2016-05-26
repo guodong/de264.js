@@ -4,13 +4,13 @@
 define(function() {
 
     var codedBlockPatternIntra4x4 = [
-        47,31,15,0,23,27,29,30,7,11,13,14,39,43,45,46,16,3,5,10,12,19,21,26,28,35,
-        37,42,44,1,2,4,8,17,18,20,24,6,9,22,25,32,33,34,36,40,38,41];
+        47, 31, 15, 0, 23, 27, 29, 30, 7, 11, 13, 14, 39, 43, 45, 46, 16, 3, 5, 10, 12, 19, 21, 26, 28, 35,
+        37, 42, 44, 1, 2, 4, 8, 17, 18, 20, 24, 6, 9, 22, 25, 32, 33, 34, 36, 40, 38, 41];
 
     var codedBlockPatternInter = [
-        0,16,1,2,4,8,32,3,5,10,12,15,47,7,11,13,14,6,9,31,35,37,42,44,33,34,36,40,
-        39,43,45,46,17,18,20,24,19,21,26,28,23,27,29,30,22,25,38,41];
-    
+        0, 16, 1, 2, 4, 8, 32, 3, 5, 10, 12, 15, 47, 7, 11, 13, 14, 6, 9, 31, 35, 37, 42, 44, 33, 34, 36, 40,
+        39, 43, 45, 46, 17, 18, 20, 24, 19, 21, 26, 28, 23, 27, 29, 30, 22, 25, 38, 41];
+
     function Queuebuffer(buf) {
         this.buf = buf;
         this.dv = new DataView(this.buf);
@@ -29,12 +29,12 @@ define(function() {
             for (var i = 0; i < needBytes; i++) {
                 bytes[i] = this.dv.getUint8(bytepos + i);
             }
-            
+
             /* cut first byte */
             bytes[0] &= (0xFF >> distToBegin);
-            
+
             for (var i = 0; i < needBytes; i++) {
-                out |= bytes[i]  << ((needBytes - i - 1) << 3) >> distToTail;
+                out |= bytes[i] << ((needBytes - i - 1) << 3) >> distToTail;
             }
             this.bitindex += numBits;
 
@@ -72,7 +72,7 @@ define(function() {
             }
         },
         deqMe: function(isIntra) {
-            code = this.deqUe();
+            var code = this.deqUe();
             if (isIntra) {
                 return codedBlockPatternIntra4x4[code];
             } else {
@@ -94,12 +94,12 @@ define(function() {
             }
         }
     };
-    
+
     function create(buf) {
         var qb = new Queuebuffer(buf);
         return qb;
     }
-    
+
     return {
         create: create
     };

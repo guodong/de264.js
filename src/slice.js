@@ -110,6 +110,8 @@ define([
                     this.slice_alpha_c0_offset_div2 = qb.deqSe();
                     this.slice_beta_offset_div2 = qb.deqSe();
                 }
+            } else {
+                this.disable_deblocking_filter_idc = 0;
             }
 
             if (this.nal.decoder.pps.num_slice_groups_minus1 > 0 && this.nal.decoder.pps.slice_group_map_type >= 3 && this.nal.decoder.pps.slice_group_map_type <= 5) {
@@ -131,15 +133,10 @@ define([
 
                 this.slice_group_change_cycle = qb.deqBits(j);
             }
+            console.log('header', this);
             /* slice_header() end*/
 
             /* slice_data() */
-            /* FF */
-            if (this.nal.decoder.pps.entropy_coding_mode_flag) {
-                while (!qb.isAligned()) {
-                    this.cabac_alignment_one_bit = qb.deqBits(1);
-                }
-            }
             //var MbaffFrameFlag = this.nal.decoder.sps.mb_adaptive_frame_field_flag && !this.field_pic_flag;
             this.MbaffFrameFlag = 0;
             var MbaffFrameFlag = this.MbaffFrameFlag;
@@ -195,17 +192,27 @@ define([
                     }
                     /* macroblock_layer() */
                     var mb = _macroblock_layer.create(this.qb, this);
+
+                    var pw = this.decoder.sps.pic_width_in_mbs_minus1 + 1;
+                    var ph = this.decoder.sps.pic_height_in_map_units_minus1 + 1;
+                    if (CurrMbAddr % pw) {
+                        mb.mbA = this.decoder.mbs[CurrMbAddr - 1];
+                    } else {
+                        mb.mbA = null;
+                    }
+                    if (CurrMbAddr / ph) {
+                        mb.mbB = this.decoder.mbs[CurrMbAddr - ph];
+                    } else {
+                        mb.mbB = null;
+                    }
                     mb.parse();
-                    console.log(mb);
+                    console.log(mb.mb_type, mb);
                     this.decoder.mbs[CurrMbAddr] = mb;
                     /* macroblock_layer() end */
                 }
                 moreDataFlag = qb.more_rbsp_data();
                 CurrMbAddr = NextMbAddress(CurrMbAddr);
             } while (moreDataFlag);
-        },
-        mb_pred: function() {
-            //if (MbPartPredMode(this.mb_type) === )
         }
     };
     

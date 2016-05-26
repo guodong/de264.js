@@ -72,8 +72,6 @@ define([
                     slice.nal = nal;
                     slice.parse();
                     console.log(slice);
-
-
                     break;
                 default:
                     break;
