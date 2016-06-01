@@ -38,7 +38,19 @@ define(function() {
         
         
 
-        /* neighbour maps */
+        /* neighbour maps
+         * Following four tables indicate neighbours of each block of a macroblock.
+         * First 16 values are for luma blocks, next 4 values for Cb and last 4
+         * values for Cr. Elements of the table indicate to which macroblock the
+         * neighbour block belongs and the index of the neighbour block in question.
+         * Indexing of the blocks goes as follows
+         *
+         *          Y             Cb       Cr
+         *      0  1  4  5      16 17    20 21
+         *      2  3  6  7      18 19    22 23
+         *      8  9 12 13
+         *     10 11 14 15
+         */
         NA_MAP: [
             [MB_A, 5], [MB_CURR, 0], [MB_A, 7], [MB_CURR, 2],
             [MB_CURR, 1], [MB_CURR, 4], [MB_CURR, 3], [MB_CURR, 6],

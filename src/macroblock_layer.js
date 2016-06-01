@@ -26,17 +26,17 @@ define([
         0x000A0180: [1, 5],
         0x00090280: [2, 5],
         0x00070800: [3, 5],
-        0x000C0071: [0, 6],
+        0x000D0078: [0, 6],
         0x000B00C0: [1, 6],
         0x000A0140: [2, 6],
         0x00080400: [3, 6],
-        0x000D0051: [0, 7],
+        0x000D0058: [0, 7],
         0x000D0070: [1, 7],
         0x000B00A0: [2, 7],
         0x00090200: [3, 7],
         0x000D0040: [0, 8],
         0x000D0050: [1, 8],
-        0x000D0061: [2, 8],
+        0x000D0068: [2, 8],
         0x000A0100: [3, 8],
         0x000E003C: [0, 9],
         0x000E0038: [1, 9],
@@ -179,7 +179,7 @@ define([
         0x00090580: [0, 11],
         0x00090700: [1, 11],
         0x00080900: [2, 11],
-        0x0008C000: [3, 11],
+        0x00080C00: [3, 11],
         0x00090400: [0, 12],
         0x00090500: [1, 12],
         0x00090680: [2, 12],
@@ -306,7 +306,7 @@ define([
         /* totalCoeff == 2 */
         0x0003E000: 0,
         0x0003C000: 1,
-        0x00039000: 2,
+        0x0003A000: 2,
         0x00038000: 3,
         0x00036000: 4,
         0x00045000: 5,
@@ -447,9 +447,8 @@ define([
         0x00018000: 2,
     }, {
         /* totalCoeff == 15 */
-        0x00020000: 0,
-        0x00024000: 1,
-        0x00018000: 2,
+        0x00010000: 0,
+        0x00018000: 1,
     }];
 
     var run_before_map = [
@@ -476,7 +475,7 @@ define([
             0x00028000: 1,
             0x00036000: 2,
             0x00034000: 3,
-            0x00033000: 4,
+            0x00032000: 4,
             0x00030000: 5,
         }, {
             0x0002C000: 0,
@@ -625,7 +624,7 @@ define([
                 nc = this.mbA.totalCoeff[neighbourA[1]];
                 tmp = 1;
             }
-            if (_common.isNeighbourAvailable(this.mbB)) {
+            if (_common.isNeighbourAvailable(this, this.mbB)) {
                 if (tmp) {
                     nc = (nc + this.mbB.totalCoeff[neighbourB[1]] + 1) >> 1;
                 } else {
@@ -638,7 +637,7 @@ define([
 
     function decodeCoeffToken(qb, nc) {
         var state = 0x00000000;
-        if (nc < 2) {
+        if (0 <= nc && nc < 2) {
             for (var size = 0; size < 16; size++) {
                 var bit = qb.deqBits(1);
                 state += 1 << 16;
@@ -684,11 +683,11 @@ define([
                 }
             }
         }
-
+        console.log('nc', nc, state);
     }
 
     function decodeLevelPrefix(qb) {
-        for (var i = 0; i < 16; i++) {
+        for (var i = 0; i < 32; i++) {
             var bit = qb.deqBits(1);
             if (bit) {
                 return i;
@@ -781,7 +780,9 @@ define([
     }
 
     function residual_block_cavlc(nc, coeffLevel, maxNumCoeff) {
-
+        for (var i = 0; i < maxNumCoeff; i++) {
+            coeffLevel[i] = 0;
+        }
         var params = decodeCoeffToken(this.qb, nc);
         var suffixLength = 0;
         var trailing_ones_sign_flag = 0;
@@ -842,9 +843,9 @@ define([
             }
 
             var run = [];
-            for (var i = 0; i< params[1]; i++) {
+            for (var i = 0; i < params[1] - 1; i++) {
                 if (zerosLeft > 0) {
-                    var run_before = decodeRunBefore(this.qb);
+                    var run_before = decodeRunBefore(this.qb, zerosLeft);
                     run[i] = run_before;
                 } else {
                     run[i] = 0;
@@ -942,6 +943,9 @@ define([
         this.slice = slice;
 
         this.totalCoeff = [];
+        for (var i = 0; i < 23; i++) {
+            this.totalCoeff[i] = 0;
+        }
     }
 
     Macroblock_layer.prototype = {
@@ -986,7 +990,7 @@ define([
                         this.CodedBlockPatternChroma = 2;
                     }
                 }
-                if (this.coded_block_pattern || MbPartPredMode(this.mb_type, this.slice.slice_type) === _defs.PRED_MODE_INTRA16x16) {
+                if (this.CodedBlockPattenLuma > 0 || this.CodedBlockPatternChroma > 0 || MbPartPredMode(this.mb_type, this.slice.slice_type) === _defs.PRED_MODE_INTRA16x16) {
                     this.mb_qp_delta = qb.deqSe();
                     residual.call(this, this.mb_type);
                 }

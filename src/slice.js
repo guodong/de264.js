@@ -133,7 +133,7 @@ define([
 
                 this.slice_group_change_cycle = qb.deqBits(j);
             }
-            console.log('header', this);
+            console.log('header', this.qb.bitindex, this);
             /* slice_header() end*/
 
             /* slice_data() */
@@ -192,7 +192,7 @@ define([
                     }
                     /* macroblock_layer() */
                     var mb = _macroblock_layer.create(this.qb, this);
-
+                    mb.mbaddr = CurrMbAddr;
                     var pw = this.decoder.sps.pic_width_in_mbs_minus1 + 1;
                     var ph = this.decoder.sps.pic_height_in_map_units_minus1 + 1;
                     if (CurrMbAddr % pw) {
@@ -200,13 +200,14 @@ define([
                     } else {
                         mb.mbA = null;
                     }
-                    if (CurrMbAddr / ph) {
-                        mb.mbB = this.decoder.mbs[CurrMbAddr - ph];
+                    if (Math.floor(CurrMbAddr / pw)) {
+                        mb.mbB = this.decoder.mbs[CurrMbAddr - pw];
                     } else {
                         mb.mbB = null;
                     }
+                    //console.log(this.qb.bitindex, this.qb.dv.getUint8(this.qb.bitindex/8));
                     mb.parse();
-                    console.log(mb.mb_type, mb);
+                    console.log(CurrMbAddr, mb.mb_type, this.qb.bitindex, mb);
                     this.decoder.mbs[CurrMbAddr] = mb;
                     /* macroblock_layer() end */
                 }
