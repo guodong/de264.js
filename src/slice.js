@@ -6,8 +6,9 @@ define([
     'de264/slice_header',
     'de264/defs',
     'de264/common',
-    'de264/macroblock_layer'
-], function(_queuebuffer, _slice_header, _defs, _common, _macroblock_layer) {
+    'de264/macroblock_layer',
+    'de264/util'
+], function(_queuebuffer, _slice_header, _defs, _common, _macroblock_layer, _util) {
 
     function Slice(buf, decoder) {
         this.buf = buf;
@@ -15,7 +16,7 @@ define([
         this.qb = _queuebuffer.create(this.buf);
         this.decoder = decoder;
     }
-    
+
     Slice.prototype = {
         parse: function() {
             var qb = this.qb;
@@ -145,7 +146,8 @@ define([
             var prevMbSkipped = 0;
             var self = this;
             var NextMbAddress = function(n) { /* could be optimized */
-                return n + 1; /* for test */
+                return n + 1;
+                /* for test */
                 // var FrameHeightInMbs = (2 - self.nal.decoder.sps.frame_mbs_only_flag) * PicHeightInMapUnits;
                 // var PicHeightInMbs = FrameHeightInMbs / ( 1 + self.field_pic_flag );
                 // var PicSizeInMbs = PicWidthInMbs * PicHeightInMbs;
@@ -193,6 +195,7 @@ define([
                     /* macroblock_layer() */
                     var mb = _macroblock_layer.create(this.qb, this);
                     mb.mbaddr = CurrMbAddr;
+                    mb.decoder = this.decoder;
                     var pw = this.decoder.sps.pic_width_in_mbs_minus1 + 1;
                     var ph = this.decoder.sps.pic_height_in_map_units_minus1 + 1;
                     if (CurrMbAddr % pw) {
@@ -205,10 +208,10 @@ define([
                     } else {
                         mb.mbB = null;
                     }
-                    //console.log(this.qb.bitindex, this.qb.dv.getUint8(this.qb.bitindex/8));
                     mb.parse();
                     console.log(CurrMbAddr, mb.mb_type, this.qb.bitindex, mb);
                     this.decoder.mbs[CurrMbAddr] = mb;
+                    mb.decode();
                     /* macroblock_layer() end */
                 }
                 moreDataFlag = qb.more_rbsp_data();
@@ -216,12 +219,14 @@ define([
             } while (moreDataFlag);
         }
     };
+
     
+
     function create(buf, sps, pps) {
         var slice = new Slice(buf, sps, pps);
         return slice;
     }
-    
+
     return {
         create: create
     };

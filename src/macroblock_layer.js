@@ -4,8 +4,9 @@
 define([
     'de264/common',
     'de264/defs',
-    'de264/queuebuffer'
-], function(_common, _defs, _queuebuffer) {
+    'de264/queuebuffer',
+    'de264/util'
+], function(_common, _defs, _queuebuffer, _util) {
 
     var coeff_map_nc_0_2 = {
         0x00018000: [0, 0],
@@ -451,57 +452,56 @@ define([
         0x00018000: 1,
     }];
 
-    var run_before_map = [
-        {
-            0x00018000: 0,
-            0x00010000: 1,
-        }, {
-            0x00018000: 0,
-            0x00024000: 1,
-            0x00020000: 2,
-        }, {
-            0x0002C000: 0,
-            0x00028000: 1,
-            0x00024000: 2,
-            0x00020000: 3,
-        }, {
-            0x0002C000: 0,
-            0x00028000: 1,
-            0x00024000: 2,
-            0x00032000: 3,
-            0x00030000: 4,
-        }, {
-            0x0002C000: 0,
-            0x00028000: 1,
-            0x00036000: 2,
-            0x00034000: 3,
-            0x00032000: 4,
-            0x00030000: 5,
-        }, {
-            0x0002C000: 0,
-            0x00030000: 1,
-            0x00032000: 2,
-            0x00036000: 3,
-            0x00034000: 4,
-            0x0003A000: 5,
-            0x00038000: 6,
-        }, {
-            0x0003E000: 0,
-            0x0003C000: 1,
-            0x0003A000: 2,
-            0x00038000: 3,
-            0x00036000: 4,
-            0x00034000: 5,
-            0x00032000: 6,
-            0x00041000: 7,
-            0x00050800: 8,
-            0x00060400: 9,
-            0x00070200: 10,
-            0x00080100: 11,
-            0x00090080: 12,
-            0x000A0040: 13,
-            0x000B0020: 14,
-        }
+    var run_before_map = [{
+        0x00018000: 0,
+        0x00010000: 1,
+    }, {
+        0x00018000: 0,
+        0x00024000: 1,
+        0x00020000: 2,
+    }, {
+        0x0002C000: 0,
+        0x00028000: 1,
+        0x00024000: 2,
+        0x00020000: 3,
+    }, {
+        0x0002C000: 0,
+        0x00028000: 1,
+        0x00024000: 2,
+        0x00032000: 3,
+        0x00030000: 4,
+    }, {
+        0x0002C000: 0,
+        0x00028000: 1,
+        0x00036000: 2,
+        0x00034000: 3,
+        0x00032000: 4,
+        0x00030000: 5,
+    }, {
+        0x0002C000: 0,
+        0x00030000: 1,
+        0x00032000: 2,
+        0x00036000: 3,
+        0x00034000: 4,
+        0x0003A000: 5,
+        0x00038000: 6,
+    }, {
+        0x0003E000: 0,
+        0x0003C000: 1,
+        0x0003A000: 2,
+        0x00038000: 3,
+        0x00036000: 4,
+        0x00034000: 5,
+        0x00032000: 6,
+        0x00041000: 7,
+        0x00050800: 8,
+        0x00060400: 9,
+        0x00070200: 10,
+        0x00080100: 11,
+        0x00090080: 12,
+        0x000A0040: 13,
+        0x000B0020: 14,
+    }
     ];
 
     var MbPartPredMode = function(mb_type, slice_type) {
@@ -776,7 +776,7 @@ define([
                 }
             }
         }
-        
+
     }
 
     function residual_block_cavlc(nc, coeffLevel, maxNumCoeff) {
@@ -865,12 +865,12 @@ define([
     function residual(mb_type) {
         if (MbPartPredMode(mb_type, this.slice.slice_type) === _defs.PRED_MODE_INTRA16x16) {
             var nc = calcNC.call(this, 0); // why?
-            var Intra16x16DCLevel = [];
-            var tc = residual_block_cavlc.call(this, nc, Intra16x16DCLevel, 16);
+            this.Intra16x16DCLevel = [];
+            var tc = residual_block_cavlc.call(this, nc, this.Intra16x16DCLevel, 16);
             this.totalCoeff[24] = tc;
         }
 
-        var Intra16x16ACLevel = [];
+        this.Intra16x16ACLevel = [];
         var LumaLevel = [];
         this.LumaLevel = LumaLevel;
         for (var i8x8 = 0; i8x8 < 4; i8x8++) {
@@ -888,9 +888,9 @@ define([
                     }
                 } else {
                     if (MbPartPredMode(mb_type, this.slice.slice_type) === _defs.PRED_MODE_INTRA16x16) {
-                        Intra16x16ACLevel[i8x8 * 4 + i4x4] = [];
+                        this.Intra16x16ACLevel[i8x8 * 4 + i4x4] = [];
                         for (var i = 0; i < 15; i++) {
-                            Intra16x16ACLevel[i8x8 * 4 + i4x4][i] = 0;
+                            this.Intra16x16ACLevel[i8x8 * 4 + i4x4][i] = 0;
                         }
                     } else {
                         LumaLevel[i8x8 * 4 + i4x4] = [];
@@ -938,6 +938,25 @@ define([
         }
     }
 
+    function LevelScale(m, i, j) {
+        var v = [
+            [10, 16, 13],
+            [11, 18, 14],
+            [13, 20, 16],
+            [14, 23, 18],
+            [16, 25, 20],
+            [18, 29, 23]
+        ];
+
+        if ((i === 0 && j === 0) || (i === 0 && j === 2) || (i === 2 && j === 0) || (i === 2 && j === 2)) {
+            return v[m][0];
+        } else if ((i === 1 && j === 1) || (i === 1 && j === 3) || (i === 3 && j === 1) || (i === 3 && j === 3)) {
+            return v[m][1];
+        } else {
+            return v[m][2];
+        }
+    }
+
     function Macroblock_layer(qb, slice) {
         this.qb = qb;
         this.slice = slice;
@@ -946,6 +965,20 @@ define([
         for (var i = 0; i < 23; i++) {
             this.totalCoeff[i] = 0;
         }
+
+        this.luma4x4 = [];
+        this.luma4x4PredMode = [];
+        this.intra4x4PredMode = [];
+        this.dataLuma = [];
+        this.dataLuma16x16 = [
+            [], [], [], [],
+            [], [], [], [],
+            [], [], [], [],
+            [], [], [], [],
+        ];
+        this.decoded = {
+            lumas: []
+        };
     }
 
     Macroblock_layer.prototype = {
@@ -994,6 +1027,434 @@ define([
                     this.mb_qp_delta = qb.deqSe();
                     residual.call(this, this.mb_type);
                 }
+            }
+        },
+        getMbPartPredMode: function() {
+            return (this.mb_type === 0) ? _defs.Intra_4x4 : _defs.Intra_16x16;
+        },
+        getIntra16x16PredMode: function() {
+            return (this.mb_type - 1) % 4;
+        },
+        isMbAAvailable: function() {
+            if (!this.mbA || this.slice != this.mbA.slice) {
+                return false;
+            }
+            return true;
+        },
+        isMbBAvailable: function() {
+            if (!this.mbB || this.slice != this.mbB.slice) {
+                return false;
+            }
+            return true;
+        },
+        getIntra4x4PredMode: function(blockIndex) {
+            var pm, pmA, pmB;
+            var nA = _common.getNeighbourA4x4(blockIndex);
+            var nB = _common.getNeighbourB4x4(blockIndex);
+
+            if (nA[0] === _defs.MB_CURR) {
+                pmA = this.intra4x4PredMode[nA[1]];
+            } else {
+                if (this.mbA === null) {
+                    pmA = -1;
+                } else {
+                    if (this.mbA.mb_type === 0) {
+                        pmA = this.mbA.intra4x4PredMode[nA[1]];
+                    } else {
+                        pmA = 2;
+                    }
+                }
+            }
+
+            if (nB[0] === _defs.MB_CURR) {
+                pmB = this.intra4x4PredMode[nB[1]];
+            } else {
+                if (this.mbB === null) {
+                    pmB = -1;
+                } else {
+                    if (this.mbB.mb_type === 0) {
+                        pmB = this.mbB.intra4x4PredMode[nB[1]];
+                    } else {
+                        pmB = 2;
+                    }
+                }
+            }
+
+            if (pmA === -1 || pmB === -1) {
+                pm = 2;
+            } else {
+                pm = _util.min(pmA, pmB);
+            }
+
+            if (!this.prev_intra4x4_pred_mode_flag[blockIndex]) {
+                if (this.rem_intra4x4_pred_mode[blockIndex] < pm) {
+                    pm = this.rem_intra4x4_pred_mode[blockIndex];
+                } else {
+                    pm = this.rem_intra4x4_pred_mode[blockIndex] + 1;
+                }
+
+            }
+
+            /* store pred mode in order to reduce calculation */
+            this.intra4x4PredMode[blockIndex] = pm;
+            return pm;
+        },
+        getRight16: function() {
+            var lumas = [];
+            for (var i = 0; i < 16; i++) {
+                if (i <= 3) {
+                    lumas[i] = this.decoded.lumas[5][i][3];
+                } else if (i <= 7) {
+                    lumas[i] = this.decoded.lumas[7][i - 4][3];
+                } else if (i <= 11) {
+                    lumas[i] = this.decoded.lumas[13][i - 8][3];
+                } else {
+                    lumas[i] = this.decoded.lumas[15][i - 12][3];
+                }
+            }
+
+            return lumas;
+        },
+        getBottom16: function() {
+            var lumas = [];
+            for (var i = 0; i < 16; i++) {
+                if (i <= 3) {
+                    lumas[i] = this.decoded.lumas[10][3][i];
+                } else if (i <= 7) {
+                    lumas[i] = this.decoded.lumas[11][3][i - 4];
+                } else if (i <= 11) {
+                    lumas[i] = this.decoded.lumas[14][3][i - 8];
+                } else {
+                    lumas[i] = this.decoded.lumas[15][3][i - 12];
+                }
+            }
+
+            return lumas;
+        },
+        getRight4: function(blockIndex) {
+            var lumas = [];
+            for (var i = 0; i < 4; i++) {
+                lumas[i] = this.decoded.lumas[blockIndex][i][3];
+            }
+            return lumas;
+        },
+        getBottom4: function(blockIndex) {
+            var lumas = [];
+            for (var i = 0; i < 4; i++) {
+                lumas[i] = this.decoded.lumas[blockIndex][3][i];
+            }
+            return lumas;
+        },
+        decode: function() {
+            if (this.getMbPartPredMode() === _defs.Intra_16x16) {
+                var pm = this.getIntra16x16PredMode();
+                switch (pm) {
+                    case _defs.Intra_16x16_Vertical:
+
+                        break;
+                    case _defs.Intra_16x16_Horizontal:
+                        var source = this.mbA.getRight16();
+                        for (var blk = 0; blk < 16; blk++) {
+
+                            var data = [
+                                [0x80, 0x80, 0x80, 0x80],
+                                [0x80, 0x80, 0x80, 0x80],
+                                [0x80, 0x80, 0x80, 0x80],
+                                [0x80, 0x80, 0x80, 0x80]
+                            ];
+                            if (blk === 0 || blk === 1 || blk === 4 || blk === 5) {
+                                for (var i = 0; i < 4; i++) {
+                                    for (var j = 0; j < 4; j++) {
+                                        data[i][j] = source[i];
+                                    }
+                                }
+                            } else if (blk === 2 || blk === 3 || blk === 6 || blk === 7) {
+                                for (var i = 0; i < 4; i++) {
+                                    for (var j = 0; j < 4; j++) {
+                                        data[i][j] = source[i + 4];
+                                    }
+                                }
+                            } else if (blk === 8 || blk === 9 || blk === 12 || blk === 13) {
+                                for (var i = 0; i < 4; i++) {
+                                    for (var j = 0; j < 4; j++) {
+                                        data[i][j] = source[i + 8];
+                                    }
+                                }
+                            } else {
+                                for (var i = 0; i < 4; i++) {
+                                    for (var j = 0; j < 4; j++) {
+                                        data[i][j] = source[i + 12];
+                                    }
+                                }
+                            }
+                            this.decoded.lumas[blk] = data;
+                        }
+                        break;
+                }
+
+                var dc = this.Intra16x16DCLevel;
+
+                var c = [
+                    [dc[0], dc[1], dc[5], dc[6]],
+                    [dc[2], dc[4], dc[7], dc[12]],
+                    [dc[3], dc[8], dc[11], dc[13]],
+                    [dc[9], dc[10], dc[14], dc[15]]
+                ];
+
+                var tmp1 = [
+                    [1, 1, 1, 1],
+                    [1, 1, -1, -1],
+                    [1, -1, -1, 1],
+                    [1, -1, 1, -1]
+                ];
+                var tmp2 = [
+                    [1, 1, 1, 1],
+                    [1, 1, -1, -1],
+                    [1, -1, -1, 1],
+                    [1, -1, 1, -1]
+                ];
+                var tmp3 = _util.matrix.multiply(tmp1, c);
+                var f = _util.matrix.multiply(tmp3, tmp2);
+                
+                var qp = this.decoder.pps.pic_init_qp_minus26 + 26 + this.slice.slice_qp_delta;
+                
+                var dcY = [[], [], [], []];
+                if (qp >= 12) {
+                    for (var i = 0; i < 4; i++) {
+                        for (var j = 0; j < 4; j++) {
+                            dcY[i][j] = (f[i][j] * LevelScale(qp % 6, 0, 0)) << (Math.floor(qp / 6) - 2);
+                        }
+                    }
+                } else {
+                    for (var i = 0; i < 4; i++) {
+                        for (var j = 0; j < 4; j++) {
+                            dcY[i][j] = (f[i][j] * LevelScale(qp % 6, 0, 0) + (1 << (1 - Math.floor(qp / 6)))) >> (2 - Math.floor(qp / 6));
+                        }
+                    }
+                }
+
+                for (var blk = 0; blk < 16; blk++) {
+                    var lumaList = [];
+                    lumaList[0] = dcY[_defs.abmap[blk][0]][_defs.abmap[blk][1]];
+                    for (var i = 1; i < 16; i++) {
+                        lumaList[i] = this.Intra16x16ACLevel[blk][i - 1];
+                    }
+
+                    var c = [
+                        [lumaList[0], lumaList[1], lumaList[5], lumaList[6]],
+                        [lumaList[2], lumaList[4], lumaList[7], lumaList[12]],
+                        [lumaList[3], lumaList[8], lumaList[11], lumaList[13]],
+                        [lumaList[9], lumaList[10], lumaList[14], lumaList[15]]
+                    ];
+                    var d = [
+                        [0, 0, 0, 0],
+                        [0, 0, 0, 0],
+                        [0, 0, 0, 0],
+                        [0, 0, 0, 0]
+                    ];
+                    for (var i = 0; i < 4; i++) {
+                        for (var j = 0; j < 4; j++) {
+                            d[i][j] = (c[i][j] * LevelScale(qp % 6, i, j)) << Math.floor(qp / 6);
+                        }
+                    }
+                    d[0][0] = c[0][0];
+
+                    var e = [
+                        [d[0][0] + d[0][2], d[0][0] - d[0][2], (d[0][1] >> 1) - d[0][3], d[0][1] + (d[0][3] >> 1)],
+                        [d[1][0] + d[1][2], d[1][0] - d[1][2], (d[1][1] >> 1) - d[1][3], d[1][1] + (d[1][3] >> 1)],
+                        [d[2][0] + d[2][2], d[2][0] - d[2][2], (d[2][1] >> 1) - d[2][3], d[2][1] + (d[2][3] >> 1)],
+                        [d[3][0] + d[3][2], d[3][0] - d[3][2], (d[3][1] >> 1) - d[3][3], d[3][1] + (d[3][3] >> 1)],
+                    ];
+
+                    var f = [
+                        [e[0][0] + e[0][3], e[0][1] + e[0][2], e[0][1] - e[0][2], e[0][0] - e[0][3]],
+                        [e[1][0] + e[1][3], e[1][1] + e[1][2], e[1][1] - e[1][2], e[1][0] - e[1][3]],
+                        [e[2][0] + e[2][3], e[2][1] + e[2][2], e[2][1] - e[2][2], e[2][0] - e[2][3]],
+                        [e[3][0] + e[3][3], e[3][1] + e[3][2], e[3][1] - e[3][2], e[3][0] - e[3][3]],
+                    ];
+
+                    var g = [
+                        [f[0][0] + f[2][0], f[0][1] + f[2][1], f[0][2] + f[2][2], f[0][3] + f[2][3]],
+                        [f[0][0] - f[2][0], f[0][1] - f[2][1], f[0][2] - f[2][2], f[0][3] - f[2][3]],
+                        [(f[1][0] >> 1) - f[3][0], (f[1][1] >> 1) - f[3][1], (f[1][2] >> 1) - f[3][2], (f[1][3] >> 1) - f[3][3]],
+                        [f[1][0] + (f[3][0] >> 1), f[1][1] + (f[3][1] >> 1), f[1][2] + (f[3][2] >> 1), f[1][3] + (f[3][3] >> 1)]
+                    ];
+
+                    var h = [
+                        [g[0][0] + g[3][0], g[0][1] + g[3][1], g[0][2] + g[3][2], g[0][3] + g[3][3]],
+                        [g[1][0] + g[2][0], g[1][1] + g[2][1], g[1][2] + g[2][2], g[1][3] + g[2][3]],
+                        [g[1][0] - g[2][0], g[1][1] - g[2][1], g[1][2] - g[2][2], g[1][3] - g[2][3]],
+                        [g[0][0] - g[3][0], g[0][1] - g[3][1], g[0][2] - g[3][2], g[0][3] - g[3][3]],
+                    ];
+
+                    var r = [];
+                    for (var i = 0; i < 4; i++) {
+                        r[i] = [];
+                        for (var j = 0; j < 4; j++) {
+                            r[i][j] = (h[i][j] + 32) >> 6;
+                        }
+                    }
+
+                    var data = this.decoded.lumas[blk];
+                    for (var i = 0; i < 4; i++) {
+                        for (var j = 0; j < 4; j++) {
+                            data[i][j] += r[i][j];
+                        }
+                    }
+                    this.decoded.lumas[blk] = data;
+
+                    console.log(data);
+                }
+
+
+
+
+            } else {
+
+                for (var blk = 0; blk < 16; blk++) {
+                    var pm = this.getIntra4x4PredMode(blk);
+
+                    var data = [
+                        [0x80, 0x80, 0x80, 0x80],
+                        [0x80, 0x80, 0x80, 0x80],
+                        [0x80, 0x80, 0x80, 0x80],
+                        [0x80, 0x80, 0x80, 0x80]
+                    ];
+
+                    switch (pm) {
+                        case _defs.Intra_4x4_Vertical:
+                            var nB = _common.getNeighbourB4x4(blk);
+                            var sourceMb;
+                            if (nB[0] === _defs.MB_CURR) {
+                                sourceMb = this;
+                            } else {
+                                sourceMb = this.mbB;
+                            }
+                            var source = sourceMb.getBottom4(nB[1]);
+                            for (var i = 0; i < 4; i++) {
+                                for (var j = 0; j < 4; j++) {
+                                    data[i][j] = source[j];
+                                }
+                            }
+                            break;
+                        case _defs.Intra_4x4_Horizontal:
+                            var nA = _common.getNeighbourA4x4(blk);
+                            var sourceMb;
+                            if (nA[0] === _defs.MB_CURR) {
+                                sourceMb = this;
+                            } else {
+                                sourceMb = this.mbA;
+                            }
+                            var source = sourceMb.getRight4(nA[1]);
+                            for (var i = 0; i < 4; i++) {
+                                for (var j = 0; j < 4; j++) {
+                                    data[i][j] = source[i];
+                                }
+                            }
+                            break;
+                        case _defs.Intra_4x4_DC:
+                            var nA = _common.getNeighbourA4x4(blk);
+                            var nB = _common.getNeighbourB4x4(blk);
+                            var Amb = (nA[0] === _defs.MB_CURR) ? this : this.mbA;
+                            var Bmb = (nB[0] === _defs.MB_CURR) ? this : this.mbB;
+                            var avgA = 0, avgB = 0, sum = 0;
+                            if (Amb === null && Bmb === null) {
+                                /* default is 128, so do nothing */
+                            } else {
+                                if (Amb !== null) {
+                                    for (var i = 0; i < 4; i++) {
+                                        sum += Amb.getRight4(nA[1])[i];
+                                    }
+                                    avgA = sum >> 2;
+                                }
+                                sum = 0;
+                                if (Bmb !== null) {
+                                    for (var i = 0; i < 4; i++) {
+                                        sum += Bmb.getBottom4(nB[1])[i];
+                                    }
+                                    avgB = sum >> 2;
+                                }
+                                var out;
+                                if (Amb === null || Bmb === null) {
+                                    out = avgA + avgB;
+                                } else {
+                                    out = (avgA + avgB) >> 1;
+                                }
+                                for (var i = 0; i < 4; i++) {
+                                    for (var j = 0; j < 4; j++) {
+                                        data[i][j] = out;
+                                    }
+                                }
+                            }
+                            break;
+                    }
+                    var lumas = this.LumaLevel[blk];
+
+                    var c = [
+                        [lumas[0], lumas[1], lumas[5], lumas[6]],
+                        [lumas[2], lumas[4], lumas[7], lumas[12]],
+                        [lumas[3], lumas[8], lumas[11], lumas[13]],
+                        [lumas[9], lumas[10], lumas[14], lumas[15]]
+                    ];
+
+                    var qp = this.decoder.pps.pic_init_qp_minus26 + 26 + this.slice.slice_qp_delta;
+
+                    var d = [
+                        [0, 0, 0, 0],
+                        [0, 0, 0, 0],
+                        [0, 0, 0, 0],
+                        [0, 0, 0, 0]
+                    ];
+                    for (var i = 0; i < 4; i++) {
+                        for (var j = 0; j < 4; j++) {
+                            d[i][j] = (c[i][j] * LevelScale(qp % 6, i, j)) << Math.floor(qp / 6);
+                        }
+                    }
+
+                    var e = [
+                        [d[0][0] + d[0][2], d[0][0] - d[0][2], (d[0][1] >> 1) - d[0][3], d[0][1] + (d[0][3] >> 1)],
+                        [d[1][0] + d[1][2], d[1][0] - d[1][2], (d[1][1] >> 1) - d[1][3], d[1][1] + (d[1][3] >> 1)],
+                        [d[2][0] + d[2][2], d[2][0] - d[2][2], (d[2][1] >> 1) - d[2][3], d[2][1] + (d[2][3] >> 1)],
+                        [d[3][0] + d[3][2], d[3][0] - d[3][2], (d[3][1] >> 1) - d[3][3], d[3][1] + (d[3][3] >> 1)],
+                    ];
+
+                    var f = [
+                        [e[0][0] + e[0][3], e[0][1] + e[0][2], e[0][1] - e[0][2], e[0][0] - e[0][3]],
+                        [e[1][0] + e[1][3], e[1][1] + e[1][2], e[1][1] - e[1][2], e[1][0] - e[1][3]],
+                        [e[2][0] + e[2][3], e[2][1] + e[2][2], e[2][1] - e[2][2], e[2][0] - e[2][3]],
+                        [e[3][0] + e[3][3], e[3][1] + e[3][2], e[3][1] - e[3][2], e[3][0] - e[3][3]],
+                    ];
+
+                    var g = [
+                        [f[0][0] + f[2][0], f[0][1] + f[2][1], f[0][2] + f[2][2], f[0][3] + f[2][3]],
+                        [f[0][0] - f[2][0], f[0][1] - f[2][1], f[0][2] - f[2][2], f[0][3] - f[2][3]],
+                        [(f[1][0] >> 1) - f[3][0], (f[1][1] >> 1) - f[3][1], (f[1][2] >> 1) - f[3][2], (f[1][3] >> 1) - f[3][3]],
+                        [f[1][0] + (f[3][0] >> 1), f[1][1] + (f[3][1] >> 1), f[1][2] + (f[3][2] >> 1), f[1][3] + (f[3][3] >> 1)]
+                    ];
+
+                    var h = [
+                        [g[0][0] + g[3][0], g[0][1] + g[3][1], g[0][2] + g[3][2], g[0][3] + g[3][3]],
+                        [g[1][0] + g[2][0], g[1][1] + g[2][1], g[1][2] + g[2][2], g[1][3] + g[2][3]],
+                        [g[1][0] - g[2][0], g[1][1] - g[2][1], g[1][2] - g[2][2], g[1][3] - g[2][3]],
+                        [g[0][0] - g[3][0], g[0][1] - g[3][1], g[0][2] - g[3][2], g[0][3] - g[3][3]],
+                    ];
+
+                    var r = [];
+                    for (var i = 0; i < 4; i++) {
+                        r[i] = [];
+                        for (var j = 0; j < 4; j++) {
+                            r[i][j] = (h[i][j] + 32) >> 6;
+                        }
+                    }
+
+                    for (var i = 0; i < 4; i++) {
+                        for (var j = 0; j < 4; j++) {
+                            data[i][j] += r[i][j];
+                        }
+                    }
+                    this.decoded.lumas[blk] = data;
+                }
+
             }
         }
     };

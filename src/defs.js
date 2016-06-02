@@ -9,6 +9,10 @@ define(function() {
     return {
         P_SLICE: 0,
         I_SLICE: 2,
+
+        /* MbPartPredMode */
+        Intra_4x4: 0,
+        Intra_16x16: 1,
         
         PRED_MODE_INTRA4x4: 0,
         PRED_MODE_INTRA16x16: 1,
@@ -66,6 +70,30 @@ define(function() {
             [MB_CURR,6], [MB_CURR,7], [MB_CURR,12],[MB_CURR,13],
             [MB_B,18],   [MB_B,19],   [MB_CURR,16],[MB_CURR,17],
             [MB_B,22],   [MB_B,23],   [MB_CURR,20],[MB_CURR,21]
+        ],
+        
+        /* Intra4x4PredMode */
+        Intra_4x4_Vertical: 0,
+        Intra_4x4_Horizontal: 1,
+        Intra_4x4_DC: 2,
+        Intra_4x4_Diagonal_Down_left: 3,
+        Intra_4x4_Diagonal_Down_Right: 4,
+        Intra_4x4_Vertical_Right: 5,
+        Intra_4x4_Horizontal_Down: 6,
+        Intra_4x4_Vertical_Left: 7,
+        Intra_4x4_Horizontal_Up: 8,
+
+        /* Intra16x16PredMode */
+        Intra_16x16_Vertical: 0,
+        Intra_16x16_Horizontal: 1,
+        Intra_16x16_DC: 2,
+        Intra_16x16_Plane: 3,
+
+        abmap: [
+            [0, 0], [0, 1], [1, 0], [1, 1],
+            [0, 2], [0, 3], [1, 2], [1, 3],
+            [2, 0], [2, 1], [3, 0], [3, 1],
+            [2, 2], [2, 3], [3, 2], [3, 3]
         ]
     };
 });
