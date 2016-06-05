@@ -1753,7 +1753,7 @@ define([
                             break;
 
                     }
-                    console.log('pred', JSON.stringify(data));
+                    //console.log('pred', JSON.stringify(data));
                     if ((this.CodedBlockPattenLuma & (1 << (blk >> 2)))) {
                         var lumas = this.LumaLevel[blk];
 
@@ -1812,7 +1812,6 @@ define([
                                 r[i][j] = (h[i][j] + 32) >> 6;
                             }
                         }
-                        //console.log('re', r);
 
                         for (var i = 0; i < 4; i++) {
                             for (var j = 0; j < 4; j++) {

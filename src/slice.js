@@ -10,6 +10,43 @@ define([
     'de264/util'
 ], function(_queuebuffer, _slice_header, _defs, _common, _macroblock_layer, _util) {
 
+    function yuv2canvas(yuv, width, height, canvas) {
+
+        canvas.width = width;
+        canvas.height = height;
+
+        context = canvas.getContext("2d");
+        output = context.createImageData(width, height);
+        outputData = output.data;
+
+        yOffset = 0;
+        uOffset = width * height;
+        vOffset = width * height + (width * height) / 4;
+        for (var h = 0; h < height; h++) {
+            for (var w = 0; w < width; w++) {
+                ypos = w + h * width + yOffset;
+
+                upos = (w >> 1) + (h >> 1) * width / 2 + uOffset;
+                vpos = (w >> 1) + (h >> 1) * width / 2 + vOffset;
+
+                Y = yuv[ypos];
+                U = yuv[upos] - 128;
+                V = yuv[vpos] - 128;
+
+                R = (Y + 1.371 * V);
+                G = (Y - 0.698 * V - 0.336 * U);
+                B = (Y + 1.732 * U);
+                outputData_pos = w * 4 + width * h * 4;
+                outputData[0 + outputData_pos] = R;
+                outputData[1 + outputData_pos] = G;
+                outputData[2 + outputData_pos] = B;
+                outputData[3 + outputData_pos] = 255;
+            }
+        }
+
+        context.putImageData(output, 0, 0);
+    }
+
     function Slice(buf, decoder) {
         this.buf = buf;
         this.dv = new DataView(this.buf);
@@ -196,7 +233,7 @@ define([
                     var mb = _macroblock_layer.create(this.qb, this);
                     mb.mbaddr = CurrMbAddr;
                     mb.decoder = this.decoder;
-                    
+
                     /* init mbA, mbB, mbC */
                     var pw = this.decoder.sps.pic_width_in_mbs_minus1 + 1;
                     var ph = this.decoder.sps.pic_height_in_map_units_minus1 + 1;
@@ -220,13 +257,33 @@ define([
                     } else {
                         mb.mbD = null;
                     }
-                    
+
                     /* parse bit stream */
                     mb.parse();
                     this.decoder.mbs[CurrMbAddr] = mb;
-                    
+
                     mb.decode();
                     console.log(CurrMbAddr, mb.mb_type, this.qb.bitindex, mb);
+                    if (mb.mbaddr === (pw * ph - 1)) {
+                        var yuv = new Array(pw * ph * 16 * 16 * 3 / 2);
+                        for (var i = 0; i < yuv.length; i++){
+                            yuv[i] = 128;
+                        }
+                        for (var i = 0; i < pw * ph; i++) {
+                            for (var j = 0; j < 16; j++) {
+                                var luma4x4 = this.decoder.mbs[i].decoded.lumas[j];
+                                for (var x = 0; x < 4; x++) {
+                                    for (var y = 0; y < 4; y++) {
+                                        yuv[pw * 16 * (Math.floor(i / pw) * 16 + 4 * (_defs.map4x4to16x16[j] >> 2) + x) + 16 * (i % pw) + 4 * (_defs.map4x4to16x16[j] % 4) + y] = luma4x4[x][y];
+                                    }
+                                }
+                            }
+
+                        }
+                        var can = document.createElement('canvas');
+                        document.body.appendChild(can);
+                        yuv2canvas(yuv, pw * 16, ph * 16, can);
+                    }
                     /* macroblock_layer() end */
                 }
                 moreDataFlag = qb.more_rbsp_data();
@@ -235,7 +292,6 @@ define([
         }
     };
 
-    
 
     function create(buf, sps, pps) {
         var slice = new Slice(buf, sps, pps);
