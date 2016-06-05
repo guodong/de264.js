@@ -20,6 +20,14 @@ define([
         return _defs.NB_MAP[blockIndex];
     }
 
+    function getNeighbourC4x4(blockIndex) {
+        return _defs.NC_MAP[blockIndex];
+    }
+
+    function getNeighbourD4x4(blockIndex) {
+        return _defs.ND_MAP[blockIndex];
+    }
+
     /*
      Check if neighbour macroblock is available. Neighbour macroblock
      is considered available if it is within the picture and belongs
@@ -31,12 +39,30 @@ define([
         }
         return true;
     }
+
+    function clip3(x, y, z) {
+        if (z < x) {
+            return x;
+        } else if (z > y) {
+            return y;
+        } else {
+            return z;
+        }
+    }
+    
+    function clip1(x) {
+        return clip3(0, 255, x);
+    }
     
     return {
         isISlice: isISlice,
         isPSlice: isPSlice,
         getNeighbourA4x4: getNeighbourA4x4,
         getNeighbourB4x4: getNeighbourB4x4,
-        isNeighbourAvailable: isNeighbourAvailable
+        getNeighbourC4x4: getNeighbourC4x4,
+        getNeighbourD4x4: getNeighbourD4x4,
+        isNeighbourAvailable: isNeighbourAvailable,
+        clip3: clip3,
+        clip1: clip1
     };
 });

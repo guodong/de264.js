@@ -13,11 +13,11 @@ define(function() {
         /* MbPartPredMode */
         Intra_4x4: 0,
         Intra_16x16: 1,
-        
+
         PRED_MODE_INTRA4x4: 0,
         PRED_MODE_INTRA16x16: 1,
         PRED_MODE_INTER: 2,
-        
+
         P_L0_16x16: 0,
         P_L0_L0_16x8: 1,
         P_L0_L0_8x16: 2,
@@ -39,8 +39,7 @@ define(function() {
         MB_D: MB_D,
         MB_CURR: MB_CURR,
         MB_NA: MB_NA,
-        
-        
+
 
         /* neighbour maps
          * Following four tables indicate neighbours of each block of a macroblock.
@@ -64,14 +63,30 @@ define(function() {
             [MB_A, 21], [MB_CURR, 20], [MB_A, 23], [MB_CURR, 22]
         ],
         NB_MAP: [
-            [MB_B,10],   [MB_B,11],   [MB_CURR,0], [MB_CURR,1],
-            [MB_B,14],   [MB_B,15],   [MB_CURR,4], [MB_CURR,5],
-            [MB_CURR,2], [MB_CURR,3], [MB_CURR,8], [MB_CURR,9],
-            [MB_CURR,6], [MB_CURR,7], [MB_CURR,12],[MB_CURR,13],
-            [MB_B,18],   [MB_B,19],   [MB_CURR,16],[MB_CURR,17],
-            [MB_B,22],   [MB_B,23],   [MB_CURR,20],[MB_CURR,21]
+            [MB_B, 10], [MB_B, 11], [MB_CURR, 0], [MB_CURR, 1],
+            [MB_B, 14], [MB_B, 15], [MB_CURR, 4], [MB_CURR, 5],
+            [MB_CURR, 2], [MB_CURR, 3], [MB_CURR, 8], [MB_CURR, 9],
+            [MB_CURR, 6], [MB_CURR, 7], [MB_CURR, 12], [MB_CURR, 13],
+            [MB_B, 18], [MB_B, 19], [MB_CURR, 16], [MB_CURR, 17],
+            [MB_B, 22], [MB_B, 23], [MB_CURR, 20], [MB_CURR, 21]
         ],
-        
+        NC_MAP: [
+            [MB_B, 11], [MB_B, 14], [MB_CURR, 1], [MB_NA, 4],
+            [MB_B, 15], [MB_C, 10], [MB_CURR, 5], [MB_NA, 0],
+            [MB_CURR, 3], [MB_CURR, 6], [MB_CURR, 9], [MB_NA, 12],
+            [MB_CURR, 7], [MB_NA, 2], [MB_CURR, 13], [MB_NA, 8],
+            [MB_B, 19], [MB_C, 18], [MB_CURR, 17], [MB_NA, 16],
+            [MB_B, 23], [MB_C, 22], [MB_CURR, 21], [MB_NA, 20]
+        ],
+        ND_MAP: [
+            [MB_D, 15], [MB_B, 10], [MB_A, 5], [MB_CURR, 0],
+            [MB_B, 11], [MB_B, 14], [MB_CURR, 1], [MB_CURR, 4],
+            [MB_A, 7], [MB_CURR, 2], [MB_A, 13], [MB_CURR, 8],
+            [MB_CURR, 3], [MB_CURR, 6], [MB_CURR, 9], [MB_CURR, 12],
+            [MB_D, 19], [MB_B, 18], [MB_A, 17], [MB_CURR, 16],
+            [MB_D, 23], [MB_B, 22], [MB_A, 21], [MB_CURR, 20]
+        ],
+
         /* Intra4x4PredMode */
         Intra_4x4_Vertical: 0,
         Intra_4x4_Horizontal: 1,
@@ -89,11 +104,20 @@ define(function() {
         Intra_16x16_DC: 2,
         Intra_16x16_Plane: 3,
 
+        /* array to block map */
         abmap: [
             [0, 0], [0, 1], [1, 0], [1, 1],
             [0, 2], [0, 3], [1, 2], [1, 3],
             [2, 0], [2, 1], [3, 0], [3, 1],
             [2, 2], [2, 3], [3, 2], [3, 3]
-        ]
+        ],
+
+        /* 4x4 block coordinate to 16x16
+         *      0  1  4  5  to 0  1  2  3
+         *      2  3  6  7     4  5  6  7
+         *      8  9 12 13     8  9  10 11
+         *     10 11 14 15     12 13 14 15
+         */
+        map4x4to16x16: [0, 1, 4, 5, 2, 3, 6, 7, 8, 9, 12, 13, 10, 11, 14, 15]
     };
 });

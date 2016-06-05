@@ -196,6 +196,8 @@ define([
                     var mb = _macroblock_layer.create(this.qb, this);
                     mb.mbaddr = CurrMbAddr;
                     mb.decoder = this.decoder;
+                    
+                    /* init mbA, mbB, mbC */
                     var pw = this.decoder.sps.pic_width_in_mbs_minus1 + 1;
                     var ph = this.decoder.sps.pic_height_in_map_units_minus1 + 1;
                     if (CurrMbAddr % pw) {
@@ -208,10 +210,23 @@ define([
                     } else {
                         mb.mbB = null;
                     }
+                    if ((mb.mbB !== null) && (CurrMbAddr % pw !== (pw - 1))) {
+                        mb.mbC = this.decoder.mbs[mb.mbB.mbaddr + 1];
+                    } else {
+                        mb.mbC = null;
+                    }
+                    if (mb.mbA !== null && mb.mbB !== null) {
+                        mb.mbD = this.decoder.mbs[mb.mbB.mbaddr - 1];
+                    } else {
+                        mb.mbD = null;
+                    }
+                    
+                    /* parse bit stream */
                     mb.parse();
-                    console.log(CurrMbAddr, mb.mb_type, this.qb.bitindex, mb);
                     this.decoder.mbs[CurrMbAddr] = mb;
+                    
                     mb.decode();
+                    console.log(CurrMbAddr, mb.mb_type, this.qb.bitindex, mb);
                     /* macroblock_layer() end */
                 }
                 moreDataFlag = qb.more_rbsp_data();
