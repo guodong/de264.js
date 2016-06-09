@@ -504,8 +504,8 @@ define([
     }
     ];
 
-    var MbPartPredMode = function(mb_type, slice_type) {
-        if (_common.isISlice(slice_type)) {
+    var MbPartPredMode = function(mb_type, isIMb) {
+        if (isIMb) {
             if (mb_type === 0) {
                 return _defs.PRED_MODE_INTRA4x4;
             } else {
@@ -515,6 +515,8 @@ define([
             return _defs.PRED_MODE_INTER;
         }
     };
+    
+    /* TODO: check MB type, I MB has no part */
     var NumMbPart = function(mb_type) {
         switch (mb_type) {
             case _defs.P_L0_16x16:
@@ -572,8 +574,9 @@ define([
 
     function mb_pred(mb_type) {
         var qb = this.qb;
-        switch (MbPartPredMode(mb_type, this.slice.slice_type)) {
-            case _defs.PRED_MODE_INTER:
+        switch (this.mbPartPredMode) {
+            case _defs.Pred_L0:
+            case _defs.Pred_Na:
                 if (this.num_ref_idx_l0_active_minus1 > 0) {
                     this.ref_idx_l0 = [];
                     for (var i = NumMbPart(mb_type), j = 0; i--; j++) {
@@ -585,7 +588,7 @@ define([
                     this.mvd_l0[j] = {hor: qb.deqSe(), ver: qb.deqSe()};
                 }
                 break;
-            case _defs.PRED_MODE_INTRA4x4:
+            case _defs.Intra_4x4:
                 this.prev_intra4x4_pred_mode_flag = [];
                 this.rem_intra4x4_pred_mode = [];
                 for (var luma4x4BlkIdx = 0; luma4x4BlkIdx < 16; luma4x4BlkIdx++) {
@@ -595,7 +598,7 @@ define([
                     }
                 }
             /* falls through */
-            case _defs.PRED_MODE_INTRA16x16:
+            case _defs.Intra_16x16:
                 this.intra_chroma_pred_mode = qb.deqUe();
                 break;
         }
@@ -862,7 +865,7 @@ define([
     }
 
     function residual(mb_type) {
-        if (MbPartPredMode(mb_type, this.slice.slice_type) === _defs.PRED_MODE_INTRA16x16) {
+        if (this.mbPartPredMode === _defs.Intra_16x16) {
             var nc = calcNC.call(this, 0); // why?
             this.Intra16x16DCLevel = [];
             var tc = residual_block_cavlc.call(this, nc, this.Intra16x16DCLevel, 16);
@@ -876,7 +879,7 @@ define([
             for (var i4x4 = 0; i4x4 < 4; i4x4++) {
                 if (this.CodedBlockPattenLuma & (1 << i8x8)) {
                     var nc = calcNC.call(this, 4 * i8x8 + i4x4);
-                    if (MbPartPredMode(mb_type, this.slice.slice_type) === _defs.PRED_MODE_INTRA16x16) {
+                    if (this.mbPartPredMode === _defs.Intra_16x16) {
                         this.Intra16x16ACLevel[i8x8 * 4 + i4x4] = [];
                         var tc = residual_block_cavlc.call(this, nc, this.Intra16x16ACLevel[i8x8 * 4 + i4x4], 15);
                         this.totalCoeff[i8x8 * 4 + i4x4] = tc;
@@ -886,7 +889,7 @@ define([
                         this.totalCoeff[i8x8 * 4 + i4x4] = tc;
                     }
                 } else {
-                    if (MbPartPredMode(mb_type, this.slice.slice_type) === _defs.PRED_MODE_INTRA16x16) {
+                    if (this.mbPartPredMode === _defs.Intra_16x16) {
                         this.Intra16x16ACLevel[i8x8 * 4 + i4x4] = [];
                         for (var i = 0; i < 15; i++) {
                             this.Intra16x16ACLevel[i8x8 * 4 + i4x4][i] = 0;
@@ -937,25 +940,6 @@ define([
         }
     }
 
-    function LevelScale(m, i, j) {
-        var v = [
-            [10, 16, 13],
-            [11, 18, 14],
-            [13, 20, 16],
-            [14, 23, 18],
-            [16, 25, 20],
-            [18, 29, 23]
-        ];
-
-        if ((i === 0 && j === 0) || (i === 0 && j === 2) || (i === 2 && j === 0) || (i === 2 && j === 2)) {
-            return v[m][0];
-        } else if ((i === 1 && j === 1) || (i === 1 && j === 3) || (i === 3 && j === 1) || (i === 3 && j === 3)) {
-            return v[m][1];
-        } else {
-            return v[m][2];
-        }
-    }
-
     function Macroblock_layer(qb, slice) {
         this.qb = qb;
         this.slice = slice;
@@ -981,9 +965,25 @@ define([
     }
 
     Macroblock_layer.prototype = {
-        parse: function() {
-            var qb = this.qb;
+        parse: function(qb) {
+            this.qb = qb;
             this.mb_type = qb.deqUe();
+            if (_common.isISlice(this.slice.slice_type)) {
+                this.type = _defs.I_MB;
+                this.mbPartPredMode = (this.mb_type === 0) ? _defs.Intra_4x4 : _defs.Intra_16x16;
+            } else {
+                if (this.mb_type > 4) { /* I Mb */
+                    this.type = _defs.I_MB;
+                    this.mb_type -= 5;
+                    this.mbPartPredMode = (this.mb_type === 0) ? _defs.Intra_4x4 : _defs.Intra_16x16;
+                } else {
+                    this.type = _defs.P_MB;
+                    if (this.mb_type === 0 || this.mb_type === 1 || this.mb_type === 2 || this.mb_type === 100) { /* mb_type 100 for P_Skip */
+                        this.mbPartPredMode = _defs.Pred_L0;
+                    }
+                }
+            }
+
             if (this.mb_type === _defs.I_PCM) { /* I_PCM */
                 while (!qb.isAligned()) {
                     this.pcm_alignment_zero_bit = qb.deqBits(1);
@@ -994,7 +994,7 @@ define([
                 }
             } else {
                 var noSubMbPartSizeLessThan8x8Flag = 1;
-                if (MbPartPredMode(this.mb_type, this.slice.slice_type) === _defs.PRED_MODE_INTER && NumMbPart(mb_type) === 4) {
+                if (this.mbPartPredMode !== _defs.Intra_4x4 && this.mbPartPredMode !== _defs.Intra_16x16 && NumMbPart(this.mb_type) === 4) {
                     /* sub_mb_pred() */
                     sub_mb_pred.call(this, this.mb_type);
                     /* sub_mb_pred() end*/
@@ -1004,8 +1004,8 @@ define([
                     /* mb_pred() end */
                 }
 
-                if (MbPartPredMode(this.mb_type, this.slice.slice_type) !== _defs.PRED_MODE_INTRA16x16) {
-                    this.coded_block_pattern = qb.deqMe(MbPartPredMode(this.mb_type, this.slice.slice_type) === _defs.PRED_MODE_INTRA4x4);
+                if (this.mbPartPredMode !== _defs.Intra_16x16) {
+                    this.coded_block_pattern = qb.deqMe(this.mbPartPredMode === _defs.Intra_4x4);
                     this.CodedBlockPattenLuma = this.coded_block_pattern % 16;
                     this.CodedBlockPatternChroma = Math.floor(this.coded_block_pattern / 16);
                 } else {
@@ -1022,7 +1022,7 @@ define([
                         this.CodedBlockPatternChroma = 2;
                     }
                 }
-                if (this.CodedBlockPattenLuma > 0 || this.CodedBlockPatternChroma > 0 || MbPartPredMode(this.mb_type, this.slice.slice_type) === _defs.PRED_MODE_INTRA16x16) {
+                if (this.CodedBlockPattenLuma > 0 || this.CodedBlockPatternChroma > 0 || this.mbPartPredMode === _defs.Intra_16x16) {
                     this.mb_qp_delta = qb.deqSe();
                     residual.call(this, this.mb_type);
                 } else {
@@ -1153,618 +1153,223 @@ define([
             return true;
         },
         decode: function() {
-            if (this.getMbPartPredMode() === _defs.Intra_16x16) {
-                var pm = this.getIntra16x16PredMode();
-                switch (pm) {
-                    case _defs.Intra_16x16_Vertical:
-                        var source = this.mbB.getBottom16();
-                        for (var blk = 0; blk < 16; blk++) {
-
-                            var data = [
-                                [0x80, 0x80, 0x80, 0x80],
-                                [0x80, 0x80, 0x80, 0x80],
-                                [0x80, 0x80, 0x80, 0x80],
-                                [0x80, 0x80, 0x80, 0x80]
-                            ];
-                            if (blk === 0 || blk === 2 || blk === 8 || blk === 10) {
-                                for (var i = 0; i < 4; i++) {
-                                    for (var j = 0; j < 4; j++) {
-                                        data[i][j] = source[j];
-                                    }
-                                }
-                            } else if (blk === 1 || blk === 3 || blk === 9 || blk === 11) {
-                                for (var i = 0; i < 4; i++) {
-                                    for (var j = 0; j < 4; j++) {
-                                        data[i][j] = source[j + 4];
-                                    }
-                                }
-                            } else if (blk === 4 || blk === 6 || blk === 12 || blk === 14) {
-                                for (var i = 0; i < 4; i++) {
-                                    for (var j = 0; j < 4; j++) {
-                                        data[i][j] = source[j + 8];
-                                    }
-                                }
-                            } else {
-                                for (var i = 0; i < 4; i++) {
-                                    for (var j = 0; j < 4; j++) {
-                                        data[i][j] = source[j + 12];
-                                    }
-                                }
-                            }
-                            this.decoded.lumas[blk] = data;
-                        }
-                        break;
-                    case _defs.Intra_16x16_Horizontal:
-                        var source = this.mbA.getRight16();
-                        for (var blk = 0; blk < 16; blk++) {
-
-                            var data = [
-                                [0x80, 0x80, 0x80, 0x80],
-                                [0x80, 0x80, 0x80, 0x80],
-                                [0x80, 0x80, 0x80, 0x80],
-                                [0x80, 0x80, 0x80, 0x80]
-                            ];
-                            if (blk === 0 || blk === 1 || blk === 4 || blk === 5) {
-                                for (var i = 0; i < 4; i++) {
-                                    for (var j = 0; j < 4; j++) {
-                                        data[i][j] = source[i];
-                                    }
-                                }
-                            } else if (blk === 2 || blk === 3 || blk === 6 || blk === 7) {
-                                for (var i = 0; i < 4; i++) {
-                                    for (var j = 0; j < 4; j++) {
-                                        data[i][j] = source[i + 4];
-                                    }
-                                }
-                            } else if (blk === 8 || blk === 9 || blk === 12 || blk === 13) {
-                                for (var i = 0; i < 4; i++) {
-                                    for (var j = 0; j < 4; j++) {
-                                        data[i][j] = source[i + 8];
-                                    }
-                                }
-                            } else {
-                                for (var i = 0; i < 4; i++) {
-                                    for (var j = 0; j < 4; j++) {
-                                        data[i][j] = source[i + 12];
-                                    }
-                                }
-                            }
-                            this.decoded.lumas[blk] = data;
-                        }
-                        break;
-                    case _defs.Intra_16x16_DC:
-                        for (var blk = 0; blk < 16; blk++) {
-                            var data = [
-                                [0x80, 0x80, 0x80, 0x80],
-                                [0x80, 0x80, 0x80, 0x80],
-                                [0x80, 0x80, 0x80, 0x80],
-                                [0x80, 0x80, 0x80, 0x80]
-                            ];
-                            var sum = 0, n = 0, out = 128;
-                            if (this.isMbAAvailable()) {
-                                var source = this.mbA.getRight16();
-                                for (var i = 0; i < 16; i++) {
-                                    sum += source[i];
-                                }
-                                n += 16;
-                            }
-                            if (this.isMbBAvailable()) {
-                                var source = this.mbB.getBottom16();
-                                for (var i = 0; i < 16; i++) {
-                                    sum += source[i];
-                                }
-                                n += 16;
-                            }
-                            if (this.isMbAAvailable() || this.isMbBAvailable()) {
-                                out = Math.floor(sum / n);
-                            }
-                            for (var i = 0; i < 4; i++) {
-                                for (var j = 0; j < 4; j++) {
-                                    data[i][j] = out;
-                                }
-                            }
-                            this.decoded.lumas[blk] = data;
-                        }
-                        break;
-                    case _defs.Intra_16x16_Plane:
-                        var left = this.mbA.getRight16();
-                        var top = this.mbB.getBottom16();
-                        var a = 16 * (top[15] + left[15]);
-                        var H = 0;
-                        for (var i = 0; i < 8; i++) {
-                            H += (i + 1) * (left[8 + i] - top[6 - i]);
-                        }
-                        var b = (5 * H + 32) >> 6;
-
-                        var V = 0;
-                        for (var i = 0; i < 8; i++) {
-                            V += (i + 1) * (top[8 + i] - left[6 - i]);
-                        }
-                        var c = (5 * V + 32) >> 6;
-                        var tmp = [];
-                        for (var i = 0; i < 16; i++) {
-                            tmp[i] = [];
-                            for (var j = 0; j < 16; j++) {
-                                tmp[i][j] = _common.clip1((a + b * (i - 7) + c * (j - 7) + 16) >> 5);
-                            }
-                        }
-
-
-                        for (var blk = 0; blk < 16; blk++) {
-                            var data = [
-                                [0x80, 0x80, 0x80, 0x80],
-                                [0x80, 0x80, 0x80, 0x80],
-                                [0x80, 0x80, 0x80, 0x80],
-                                [0x80, 0x80, 0x80, 0x80]
-                            ];
-                            var bid = _defs.map4x4to16x16[blk];
-                            for (var i = 0; i < 4; i++) {
-                                for (var j = 0; j < 4; j++) {
-                                    data[i][j] = tmp[(bid % 4) * 4 + i][(bid % 4) * 4 + j];
-                                }
-                            }
-
-                            this.decoded.lumas[blk] = data;
-                        }
-                        break;
-
-                }
-
-                /* bellow is residual */
-                var dc = this.Intra16x16DCLevel;
-
-                var c = [
-                    [dc[0], dc[1], dc[5], dc[6]],
-                    [dc[2], dc[4], dc[7], dc[12]],
-                    [dc[3], dc[8], dc[11], dc[13]],
-                    [dc[9], dc[10], dc[14], dc[15]]
-                ];
-
-                var tmp1 = [
-                    [1, 1, 1, 1],
-                    [1, 1, -1, -1],
-                    [1, -1, -1, 1],
-                    [1, -1, 1, -1]
-                ];
-                var tmp2 = [
-                    [1, 1, 1, 1],
-                    [1, 1, -1, -1],
-                    [1, -1, -1, 1],
-                    [1, -1, 1, -1]
-                ];
-                var tmp3 = _util.matrix.multiply(tmp1, c);
-                var f = _util.matrix.multiply(tmp3, tmp2);
-
-                var qpY = this.decoder.pps.pic_init_qp_minus26 + 26 + this.slice.slice_qp_delta;
-                if (this.mbaddr !== this.first_mb_in_slice) {
-                    qpY = (this.slice.decoder.mbs[this.mbaddr - 1].qpY + this.mb_qp_delta + 52) % 52;
-                }
-                this.qpY = qpY;
-
-                var dcY = [[], [], [], []];
-                if (qpY >= 12) {
-                    for (var i = 0; i < 4; i++) {
-                        for (var j = 0; j < 4; j++) {
-                            dcY[i][j] = (f[i][j] * LevelScale(qpY % 6, 0, 0)) << (Math.floor(qpY / 6) - 2);
-                        }
-                    }
-                } else {
-                    for (var i = 0; i < 4; i++) {
-                        for (var j = 0; j < 4; j++) {
-                            dcY[i][j] = (f[i][j] * LevelScale(qpY % 6, 0, 0) + (1 << (1 - Math.floor(qpY / 6)))) >> (2 - Math.floor(qpY / 6));
-                        }
-                    }
-                }
-
-                for (var blk = 0; blk < 16; blk++) {
-                    var lumaList = [];
-                    lumaList[0] = dcY[_defs.abmap[blk][0]][_defs.abmap[blk][1]];
-                    for (var i = 1; i < 16; i++) {
-                        lumaList[i] = this.Intra16x16ACLevel[blk][i - 1];
-                    }
-
-                    var c = [
-                        [lumaList[0], lumaList[1], lumaList[5], lumaList[6]],
-                        [lumaList[2], lumaList[4], lumaList[7], lumaList[12]],
-                        [lumaList[3], lumaList[8], lumaList[11], lumaList[13]],
-                        [lumaList[9], lumaList[10], lumaList[14], lumaList[15]]
-                    ];
-                    var d = [
-                        [0, 0, 0, 0],
-                        [0, 0, 0, 0],
-                        [0, 0, 0, 0],
-                        [0, 0, 0, 0]
-                    ];
-                    for (var i = 0; i < 4; i++) {
-                        for (var j = 0; j < 4; j++) {
-                            d[i][j] = (c[i][j] * LevelScale(qpY % 6, i, j)) << Math.floor(qpY / 6);
-                        }
-                    }
-                    d[0][0] = c[0][0];
-
-                    var e = [
-                        [d[0][0] + d[0][2], d[0][0] - d[0][2], (d[0][1] >> 1) - d[0][3], d[0][1] + (d[0][3] >> 1)],
-                        [d[1][0] + d[1][2], d[1][0] - d[1][2], (d[1][1] >> 1) - d[1][3], d[1][1] + (d[1][3] >> 1)],
-                        [d[2][0] + d[2][2], d[2][0] - d[2][2], (d[2][1] >> 1) - d[2][3], d[2][1] + (d[2][3] >> 1)],
-                        [d[3][0] + d[3][2], d[3][0] - d[3][2], (d[3][1] >> 1) - d[3][3], d[3][1] + (d[3][3] >> 1)],
-                    ];
-
-                    var f = [
-                        [e[0][0] + e[0][3], e[0][1] + e[0][2], e[0][1] - e[0][2], e[0][0] - e[0][3]],
-                        [e[1][0] + e[1][3], e[1][1] + e[1][2], e[1][1] - e[1][2], e[1][0] - e[1][3]],
-                        [e[2][0] + e[2][3], e[2][1] + e[2][2], e[2][1] - e[2][2], e[2][0] - e[2][3]],
-                        [e[3][0] + e[3][3], e[3][1] + e[3][2], e[3][1] - e[3][2], e[3][0] - e[3][3]],
-                    ];
-
-                    var g = [
-                        [f[0][0] + f[2][0], f[0][1] + f[2][1], f[0][2] + f[2][2], f[0][3] + f[2][3]],
-                        [f[0][0] - f[2][0], f[0][1] - f[2][1], f[0][2] - f[2][2], f[0][3] - f[2][3]],
-                        [(f[1][0] >> 1) - f[3][0], (f[1][1] >> 1) - f[3][1], (f[1][2] >> 1) - f[3][2], (f[1][3] >> 1) - f[3][3]],
-                        [f[1][0] + (f[3][0] >> 1), f[1][1] + (f[3][1] >> 1), f[1][2] + (f[3][2] >> 1), f[1][3] + (f[3][3] >> 1)]
-                    ];
-
-                    var h = [
-                        [g[0][0] + g[3][0], g[0][1] + g[3][1], g[0][2] + g[3][2], g[0][3] + g[3][3]],
-                        [g[1][0] + g[2][0], g[1][1] + g[2][1], g[1][2] + g[2][2], g[1][3] + g[2][3]],
-                        [g[1][0] - g[2][0], g[1][1] - g[2][1], g[1][2] - g[2][2], g[1][3] - g[2][3]],
-                        [g[0][0] - g[3][0], g[0][1] - g[3][1], g[0][2] - g[3][2], g[0][3] - g[3][3]],
-                    ];
-
-                    var r = [[], [], [], []];
-                    for (var i = 0; i < 4; i++) {
-                        for (var j = 0; j < 4; j++) {
-                            r[i][j] = (h[i][j] + 32) >> 6;
-                        }
-                    }
-
-                    var data = this.decoded.lumas[blk];
-                    for (var i = 0; i < 4; i++) {
-                        for (var j = 0; j < 4; j++) {
-                            data[i][j] += r[i][j];
-                        }
-                    }
-                    this.decoded.lumas[blk] = data;
-
-                }
-
-
-            } else {
-
-                var qpY = this.decoder.pps.pic_init_qp_minus26 + 26 + this.slice.slice_qp_delta;
-                if (this.mbaddr !== this.slice.first_mb_in_slice) {
-                    qpY = (this.slice.decoder.mbs[this.mbaddr - 1].qpY + this.mb_qp_delta + 52) % 52;
-                }
-                this.qpY = qpY;
-
-                for (var blk = 0; blk < 16; blk++) {
-                    var pm = this.getIntra4x4PredMode(blk);
-
-                    var data = [
-                        [0x80, 0x80, 0x80, 0x80],
-                        [0x80, 0x80, 0x80, 0x80],
-                        [0x80, 0x80, 0x80, 0x80],
-                        [0x80, 0x80, 0x80, 0x80]
-                    ];
-
+            if (this.type === _defs.I_MB) {
+                if (this.mbPartPredMode === _defs.Intra_16x16) {
+                    var pm = this.getIntra16x16PredMode();
                     switch (pm) {
-                        case _defs.Intra_4x4_Vertical:
-                            var nB = _common.getNeighbourB4x4(blk);
-                            var sourceMb;
-                            if (nB[0] === _defs.MB_CURR) {
-                                sourceMb = this;
-                            } else {
-                                sourceMb = this.mbB;
-                            }
-                            var source = sourceMb.getBottom4(nB[1]);
-                            for (var i = 0; i < 4; i++) {
-                                for (var j = 0; j < 4; j++) {
-                                    data[i][j] = source[j];
-                                }
-                            }
-                            break;
-                        case _defs.Intra_4x4_Horizontal:
-                            var nA = _common.getNeighbourA4x4(blk);
-                            var sourceMb;
-                            if (nA[0] === _defs.MB_CURR) {
-                                sourceMb = this;
-                            } else {
-                                sourceMb = this.mbA;
-                            }
-                            var source = sourceMb.getRight4(nA[1]);
-                            for (var i = 0; i < 4; i++) {
-                                for (var j = 0; j < 4; j++) {
-                                    data[i][j] = source[i];
-                                }
-                            }
-                            break;
-                        case _defs.Intra_4x4_DC:
-                            var nA = _common.getNeighbourA4x4(blk);
-                            var nB = _common.getNeighbourB4x4(blk);
-                            var Amb = (nA[0] === _defs.MB_CURR) ? this : this.mbA;
-                            var Bmb = (nB[0] === _defs.MB_CURR) ? this : this.mbB;
-                            var sum = 0, n = 0;
-                            if (Amb === null && Bmb === null) {
-                                /* default is 128, so do nothing */
-                            } else {
-                                if (this.isNeighbourAvailable(Amb)) {
+                        case _defs.Intra_16x16_Vertical:
+                            var source = this.mbB.getBottom16();
+                            for (var blk = 0; blk < 16; blk++) {
+
+                                var data = [
+                                    [0x80, 0x80, 0x80, 0x80],
+                                    [0x80, 0x80, 0x80, 0x80],
+                                    [0x80, 0x80, 0x80, 0x80],
+                                    [0x80, 0x80, 0x80, 0x80]
+                                ];
+                                if (blk === 0 || blk === 2 || blk === 8 || blk === 10) {
                                     for (var i = 0; i < 4; i++) {
-                                        sum += Amb.getRight4(nA[1])[i];
+                                        for (var j = 0; j < 4; j++) {
+                                            data[i][j] = source[j];
+                                        }
                                     }
-                                    sum += 2;
-                                    n += 4;
-                                }
-                                if (this.isNeighbourAvailable(Bmb)) {
+                                } else if (blk === 1 || blk === 3 || blk === 9 || blk === 11) {
                                     for (var i = 0; i < 4; i++) {
-                                        sum += Bmb.getBottom4(nB[1])[i];
+                                        for (var j = 0; j < 4; j++) {
+                                            data[i][j] = source[j + 4];
+                                        }
                                     }
-                                    sum += 2;
-                                    n += 4;
-                                }
-                                var out;
-                                if (this.isNeighbourAvailable(Amb) || this.isNeighbourAvailable(Bmb)) {
-                                    out = Math.floor(sum / n);
+                                } else if (blk === 4 || blk === 6 || blk === 12 || blk === 14) {
+                                    for (var i = 0; i < 4; i++) {
+                                        for (var j = 0; j < 4; j++) {
+                                            data[i][j] = source[j + 8];
+                                        }
+                                    }
                                 } else {
-                                    out = 128;
+                                    for (var i = 0; i < 4; i++) {
+                                        for (var j = 0; j < 4; j++) {
+                                            data[i][j] = source[j + 12];
+                                        }
+                                    }
+                                }
+                                this.decoded.lumas[blk] = data;
+                            }
+                            break;
+                        case _defs.Intra_16x16_Horizontal:
+                            var source = this.mbA.getRight16();
+                            for (var blk = 0; blk < 16; blk++) {
+
+                                var data = [
+                                    [0x80, 0x80, 0x80, 0x80],
+                                    [0x80, 0x80, 0x80, 0x80],
+                                    [0x80, 0x80, 0x80, 0x80],
+                                    [0x80, 0x80, 0x80, 0x80]
+                                ];
+                                if (blk === 0 || blk === 1 || blk === 4 || blk === 5) {
+                                    for (var i = 0; i < 4; i++) {
+                                        for (var j = 0; j < 4; j++) {
+                                            data[i][j] = source[i];
+                                        }
+                                    }
+                                } else if (blk === 2 || blk === 3 || blk === 6 || blk === 7) {
+                                    for (var i = 0; i < 4; i++) {
+                                        for (var j = 0; j < 4; j++) {
+                                            data[i][j] = source[i + 4];
+                                        }
+                                    }
+                                } else if (blk === 8 || blk === 9 || blk === 12 || blk === 13) {
+                                    for (var i = 0; i < 4; i++) {
+                                        for (var j = 0; j < 4; j++) {
+                                            data[i][j] = source[i + 8];
+                                        }
+                                    }
+                                } else {
+                                    for (var i = 0; i < 4; i++) {
+                                        for (var j = 0; j < 4; j++) {
+                                            data[i][j] = source[i + 12];
+                                        }
+                                    }
+                                }
+                                this.decoded.lumas[blk] = data;
+                            }
+                            break;
+                        case _defs.Intra_16x16_DC:
+                            for (var blk = 0; blk < 16; blk++) {
+                                var data = [
+                                    [0x80, 0x80, 0x80, 0x80],
+                                    [0x80, 0x80, 0x80, 0x80],
+                                    [0x80, 0x80, 0x80, 0x80],
+                                    [0x80, 0x80, 0x80, 0x80]
+                                ];
+                                var sum = 0, n = 0, out = 128;
+                                if (this.isMbAAvailable()) {
+                                    var source = this.mbA.getRight16();
+                                    for (var i = 0; i < 16; i++) {
+                                        sum += source[i];
+                                    }
+                                    n += 16;
+                                }
+                                if (this.isMbBAvailable()) {
+                                    var source = this.mbB.getBottom16();
+                                    for (var i = 0; i < 16; i++) {
+                                        sum += source[i];
+                                    }
+                                    n += 16;
+                                }
+                                if (this.isMbAAvailable() || this.isMbBAvailable()) {
+                                    out = Math.floor(sum / n);
                                 }
                                 for (var i = 0; i < 4; i++) {
                                     for (var j = 0; j < 4; j++) {
                                         data[i][j] = out;
                                     }
                                 }
+                                this.decoded.lumas[blk] = data;
                             }
                             break;
-                        case _defs.Intra_4x4_Diagonal_Down_left:
-                            var nB = _common.getNeighbourB4x4(blk);
-                            var sourceMb;
-                            if (nB[0] === _defs.MB_CURR) {
-                                sourceMb = this;
-                            } else {
-                                sourceMb = this.mbB;
+                        case _defs.Intra_16x16_Plane:
+                            var left = this.mbA.getRight16();
+                            var top = this.mbB.getBottom16();
+                            var a = 16 * (top[15] + left[15]);
+                            var H = 0;
+                            for (var i = 0; i < 8; i++) {
+                                H += (i + 1) * (left[8 + i] - top[6 - i]);
                             }
-                            var source1 = sourceMb.getBottom4(nB[1]);
+                            var b = (5 * H + 32) >> 6;
 
-                            var source2;
-                            var nC = _common.getNeighbourC4x4(blk);
-                            if (nC[0] === _defs.MB_CURR) {
-                                sourceMb = this;
-                                source2 = sourceMb.getBottom4(nC[1]);
-                            } else if (nC[0] === _defs.MB_C) {
-                                sourceMb = this.mbC;
-                                source2 = sourceMb.getBottom4(nC[1]);
-                            } else if (nC[0] === _defs.MB_B) {
-                                sourceMb = this.mbB;
-                                source2 = sourceMb.getBottom4(nC[1]);
-                            } else { /* MB_NA */
-                                source2 = [source1[3], source1[3], source1[3], source1[3]];
+                            var V = 0;
+                            for (var i = 0; i < 8; i++) {
+                                V += (i + 1) * (top[8 + i] - left[6 - i]);
                             }
-
-                            var source = source1.concat(source2);
-                            for (var i = 4; i--;) {
-                                for (var j = 4; j--;) {
-                                    if (i === 3 && j === 3) {
-                                        data[j][i] = (source[6] + 3 * source[7] + 2) >> 2;
-                                    } else {
-                                        data[j][i] = (source[i + j] + 2 * source[i + j + 1] + source[i + j + 2] + 2) >> 2;
-                                    }
+                            var c = (5 * V + 32) >> 6;
+                            var tmp = [];
+                            for (var i = 0; i < 16; i++) {
+                                tmp[i] = [];
+                                for (var j = 0; j < 16; j++) {
+                                    tmp[i][j] = _common.clip1((a + b * (i - 7) + c * (j - 7) + 16) >> 5);
                                 }
                             }
-                            break;
-                        case _defs.Intra_4x4_Diagonal_Down_Right:
-                            var nD = _common.getNeighbourD4x4(blk);
-                            var sourceMb;
-                            if (nD[0] === _defs.MB_CURR) {
-                                sourceMb = this;
-                            } else if (nD[0] === _defs.MB_A) {
-                                sourceMb = this.mbA;
-                            } else if (nD[0] === _defs.MB_B) {
-                                sourceMb = this.mbB;
-                            } else if (nD[0] === _defs.MB_D) {
-                                sourceMb = this.mbD;
-                            }
-                            var sourceD = sourceMb.getRight4(nD[1]);
 
-                            var nA = _common.getNeighbourA4x4(blk);
-                            if (nA[0] === _defs.MB_CURR) {
-                                sourceMb = this;
-                            } else {
-                                sourceMb = this.mbA;
-                            }
-                            var sourceA = sourceMb.getRight4(nA[1]);
 
-                            var nB = _common.getNeighbourB4x4(blk);
-                            var sourceMb;
-                            if (nB[0] === _defs.MB_CURR) {
-                                sourceMb = this;
-                            } else {
-                                sourceMb = this.mbB;
-                            }
-                            var sourceB = sourceMb.getBottom4(nB[1]);
-
-                            sourceA = [sourceD[3]].concat(sourceA);
-                            sourceB = [sourceD[3]].concat(sourceB);
-
-                            for (var i = 4; i--;) {
-                                for (var j = 4; j--;) {
-                                    if (i > j) {
-                                        data[j][i] = (sourceB[i - j - 1] + 2 * sourceB[i - j] + sourceB[i - j + 1] + 2) >> 2;
-                                    } else if (i < j) {
-                                        data[j][i] = (sourceA[j - i - 1] + 2 * sourceB[j - i] + sourceB[j - i + 1] + 2) >> 2;
-                                    } else {
-                                        data[j][i] = (sourceB[1] + 2 * sourceB[0] + sourceA[1] + 2) >> 2;
+                            for (var blk = 0; blk < 16; blk++) {
+                                var data = [
+                                    [0x80, 0x80, 0x80, 0x80],
+                                    [0x80, 0x80, 0x80, 0x80],
+                                    [0x80, 0x80, 0x80, 0x80],
+                                    [0x80, 0x80, 0x80, 0x80]
+                                ];
+                                var bid = _defs.map4x4to16x16[blk];
+                                for (var i = 0; i < 4; i++) {
+                                    for (var j = 0; j < 4; j++) {
+                                        data[i][j] = tmp[(bid % 4) * 4 + i][(bid % 4) * 4 + j];
                                     }
                                 }
-                            }
-                            break;
-                        case _defs.Intra_4x4_Vertical_Right:
-                            var nD = _common.getNeighbourD4x4(blk);
-                            var sourceMb;
-                            if (nD[0] === _defs.MB_CURR) {
-                                sourceMb = this;
-                            } else if (nD[0] === _defs.MB_A) {
-                                sourceMb = this.mbA;
-                            } else if (nD[0] === _defs.MB_B) {
-                                sourceMb = this.mbB;
-                            } else if (nD[0] === _defs.MB_D) {
-                                sourceMb = this.mbD;
-                            }
-                            var sourceD = sourceMb.getRight4(nD[1]);
 
-                            var nA = _common.getNeighbourA4x4(blk);
-                            if (nA[0] === _defs.MB_CURR) {
-                                sourceMb = this;
-                            } else {
-                                sourceMb = this.mbA;
-                            }
-                            var sourceA = sourceMb.getRight4(nA[1]);
-
-                            var nB = _common.getNeighbourB4x4(blk);
-                            var sourceMb;
-                            if (nB[0] === _defs.MB_CURR) {
-                                sourceMb = this;
-                            } else {
-                                sourceMb = this.mbB;
-                            }
-                            var sourceB = sourceMb.getBottom4(nB[1]);
-
-                            sourceA = [sourceD[3]].concat(sourceA);
-                            sourceB = [sourceD[3]].concat(sourceB);
-
-                            for (var i = 4; i--;) {
-                                for (var j = 4; j--;) {
-                                    if ((2 * i - j === 0) || (2 * i - j === 2) || (2 * i - j === 4) || (2 * i - j === 6)) {
-                                        data[j][i] = (sourceB[i - (j >> 1)] + sourceB[i - (j >> 1) + 1] + 1) >> 1;
-                                    } else if ((2 * i - j === 1) || (2 * i - j === 3) || (2 * i - j === 5)) {
-                                        data[j][i] = (sourceB[i - (j >> 1) - 1] + 2 * sourceB[i - (j >> 1)] + sourceB[i - (j >> 1) + 1] + 2) >> 2;
-                                    } else if (2 * i - j === -1) {
-                                        data[j][i] = (sourceA[1] + 2 * sourceA[0] + sourceB[1] + 2) >> 2;
-                                    } else {
-                                        data[j][i] = (sourceA[j] + 2 * sourceA[j - 1] + sourceA[j - 2] + 2) >> 2;
-                                    }
-                                }
-                            }
-                            break;
-                        case _defs.Intra_4x4_Horizontal_Down:
-                            var nD = _common.getNeighbourD4x4(blk);
-                            var sourceMb;
-                            if (nD[0] === _defs.MB_CURR) {
-                                sourceMb = this;
-                            } else if (nD[0] === _defs.MB_A) {
-                                sourceMb = this.mbA;
-                            } else if (nD[0] === _defs.MB_B) {
-                                sourceMb = this.mbB;
-                            } else if (nD[0] === _defs.MB_D) {
-                                sourceMb = this.mbD;
-                            }
-                            var sourceD = sourceMb.getRight4(nD[1]);
-
-                            var nA = _common.getNeighbourA4x4(blk);
-                            if (nA[0] === _defs.MB_CURR) {
-                                sourceMb = this;
-                            } else {
-                                sourceMb = this.mbA;
-                            }
-                            var sourceA = sourceMb.getRight4(nA[1]);
-
-                            var nB = _common.getNeighbourB4x4(blk);
-                            var sourceMb;
-                            if (nB[0] === _defs.MB_CURR) {
-                                sourceMb = this;
-                            } else {
-                                sourceMb = this.mbB;
-                            }
-                            var sourceB = sourceMb.getBottom4(nB[1]);
-
-                            sourceA = [sourceD[3]].concat(sourceA);
-                            sourceB = [sourceD[3]].concat(sourceB);
-
-                            for (var i = 4; i--;) {
-                                for (var j = 4; j--;) {
-                                    if ((2 * j - i === 0) || (2 * j - i === 2) || (2 * j - i === 4) || (2 * j - i === 6)) {
-                                        data[j][i] = (sourceA[j - (i >> 1)] + sourceA[j - (i >> 1) + 1] + 1) >> 1;
-                                    } else if ((2 * j - i === 1) || (2 * j - i === 3) || (2 * j - i === 5)) {
-                                        data[j][i] = (sourceA[j - (i >> 1) - 1] + 2 * sourceA[j - (i >> 1)] + sourceA[j - (i >> 1) + 1] + 2) >> 2;
-                                    } else if (2 * j - i === -1) {
-                                        data[j][i] = (sourceA[1] + 2 * sourceA[0] + sourceB[1] + 2) >> 2;
-                                    } else {
-                                        data[j][i] = (sourceB[i] + 2 * sourceB[i - 1] + sourceB[i - 2] + 2) >> 2;
-                                    }
-                                }
-                            }
-                            break;
-                        case _defs.Intra_4x4_Vertical_Left:
-                            var nB = _common.getNeighbourB4x4(blk);
-                            var sourceMb;
-                            if (nB[0] === _defs.MB_CURR) {
-                                sourceMb = this;
-                            } else {
-                                sourceMb = this.mbB;
-                            }
-                            var source1 = sourceMb.getBottom4(nB[1]);
-
-                            var source2;
-                            var nC = _common.getNeighbourC4x4(blk);
-                            if (nC[0] === _defs.MB_CURR) {
-                                sourceMb = this;
-                                source2 = sourceMb.getBottom4(nC[1]);
-                            } else if (nC[0] === _defs.MB_C) {
-                                sourceMb = this.mbC;
-                                source2 = sourceMb.getBottom4(nC[1]);
-                            } else if (nC[0] === _defs.MB_B) {
-                                sourceMb = this.mbB;
-                                source2 = sourceMb.getBottom4(nC[1]);
-                            } else { /* MB_NA */
-                                source2 = [source1[3], source1[3], source1[3], source1[3]];
-                            }
-
-                            var source = source1.concat(source2);
-                            for (var i = 4; i--;) {
-                                for (var j = 4; j--;) {
-                                    if (j === 0 || j === 2) {
-                                        data[j][i] = (source[i + (j >> 1)] + source[i + (j >> 1) + 1] + 1) >> 1;
-                                    } else {
-                                        data[j][i] = (source[i + (j >> 1)] + 2 * source[i + (j >> 1) + 1] + source[i + (j >> 1) + 2] + 2) >> 2;
-                                    }
-                                }
-                            }
-                            break;
-                        case _defs.Intra_4x4_Horizontal_Up:
-                            var nA = _common.getNeighbourA4x4(blk);
-                            var sourceMb;
-                            if (nA[0] === _defs.MB_CURR) {
-                                sourceMb = this;
-                            } else {
-                                sourceMb = this.mbA;
-                            }
-                            var source = sourceMb.getRight4(nA[1]);
-
-                            for (var i = 4; i--;) {
-                                for (var j = 4; j--;) {
-                                    if ((i + 2 * j === 0) || (i + 2 * j === 2) || (i + 2 * j === 4)) {
-                                        data[j][i] = (source[j + (i >> 1)] + source[j + (i >> 1) + 1] + 1) >> 1;
-                                    } else if ((i + 2 * j === 1) || (i + 2 * j === 3)) {
-                                        data[j][i] = (source[j + (i >> 1)] + 2 * source[j + (i >> 1) + 1] + source[j + (i >> 1) + 2] + 2) >> 2;
-                                    } else if (i + 2 * j === 5) {
-                                        data[j][i] = (source[2] + 3 * source[3] + 2) >> 2;
-                                    } else {
-                                        data[j][i] = source[3];
-                                    }
-                                }
+                                this.decoded.lumas[blk] = data;
                             }
                             break;
 
                     }
-                    //console.log('pred', JSON.stringify(data));
-                    if ((this.CodedBlockPattenLuma & (1 << (blk >> 2)))) {
-                        var lumas = this.LumaLevel[blk];
+
+                    /* bellow is residual */
+                    var dc = this.Intra16x16DCLevel;
+
+                    var c = [
+                        [dc[0], dc[1], dc[5], dc[6]],
+                        [dc[2], dc[4], dc[7], dc[12]],
+                        [dc[3], dc[8], dc[11], dc[13]],
+                        [dc[9], dc[10], dc[14], dc[15]]
+                    ];
+
+                    var tmp1 = [
+                        [1, 1, 1, 1],
+                        [1, 1, -1, -1],
+                        [1, -1, -1, 1],
+                        [1, -1, 1, -1]
+                    ];
+                    var tmp2 = [
+                        [1, 1, 1, 1],
+                        [1, 1, -1, -1],
+                        [1, -1, -1, 1],
+                        [1, -1, 1, -1]
+                    ];
+                    var tmp3 = _util.matrix.multiply(tmp1, c);
+                    var f = _util.matrix.multiply(tmp3, tmp2);
+
+                    var qpY = this.decoder.pps.pic_init_qp_minus26 + 26 + this.slice.slice_qp_delta;
+                    if (this.mbaddr !== this.first_mb_in_slice) {
+                        qpY = (this.slice.decoder.mbs[this.mbaddr - 1].qpY + this.mb_qp_delta + 52) % 52;
+                    }
+                    this.qpY = qpY;
+
+                    var dcY = [[], [], [], []];
+                    if (qpY >= 12) {
+                        for (var i = 0; i < 4; i++) {
+                            for (var j = 0; j < 4; j++) {
+                                dcY[i][j] = (f[i][j] * _common.LevelScale(qpY % 6, 0, 0)) << (Math.floor(qpY / 6) - 2);
+                            }
+                        }
+                    } else {
+                        for (var i = 0; i < 4; i++) {
+                            for (var j = 0; j < 4; j++) {
+                                dcY[i][j] = (f[i][j] * _common.LevelScale(qpY % 6, 0, 0) + (1 << (1 - Math.floor(qpY / 6)))) >> (2 - Math.floor(qpY / 6));
+                            }
+                        }
+                    }
+
+                    for (var blk = 0; blk < 16; blk++) {
+                        var lumaList = [];
+                        lumaList[0] = dcY[_defs.abmap[blk][0]][_defs.abmap[blk][1]];
+                        for (var i = 1; i < 16; i++) {
+                            lumaList[i] = this.Intra16x16ACLevel[blk][i - 1];
+                        }
 
                         var c = [
-                            [lumas[0], lumas[1], lumas[5], lumas[6]],
-                            [lumas[2], lumas[4], lumas[7], lumas[12]],
-                            [lumas[3], lumas[8], lumas[11], lumas[13]],
-                            [lumas[9], lumas[10], lumas[14], lumas[15]]
+                            [lumaList[0], lumaList[1], lumaList[5], lumaList[6]],
+                            [lumaList[2], lumaList[4], lumaList[7], lumaList[12]],
+                            [lumaList[3], lumaList[8], lumaList[11], lumaList[13]],
+                            [lumaList[9], lumaList[10], lumaList[14], lumaList[15]]
                         ];
-
-
                         var d = [
                             [0, 0, 0, 0],
                             [0, 0, 0, 0],
@@ -1773,9 +1378,10 @@ define([
                         ];
                         for (var i = 0; i < 4; i++) {
                             for (var j = 0; j < 4; j++) {
-                                d[i][j] = (c[i][j] * LevelScale(qpY % 6, i, j)) << Math.floor(qpY / 6);
+                                d[i][j] = (c[i][j] * _common.LevelScale(qpY % 6, i, j)) << Math.floor(qpY / 6);
                             }
                         }
+                        d[0][0] = c[0][0];
 
                         var e = [
                             [d[0][0] + d[0][2], d[0][0] - d[0][2], (d[0][1] >> 1) - d[0][3], d[0][1] + (d[0][3] >> 1)],
@@ -1805,35 +1411,437 @@ define([
                             [g[0][0] - g[3][0], g[0][1] - g[3][1], g[0][2] - g[3][2], g[0][3] - g[3][3]],
                         ];
 
-                        var r = [];
+                        var r = [[], [], [], []];
                         for (var i = 0; i < 4; i++) {
-                            r[i] = [];
                             for (var j = 0; j < 4; j++) {
                                 r[i][j] = (h[i][j] + 32) >> 6;
                             }
                         }
 
+                        var data = this.decoded.lumas[blk];
                         for (var i = 0; i < 4; i++) {
                             for (var j = 0; j < 4; j++) {
                                 data[i][j] += r[i][j];
-                                if (data[i][j] < 0) {
-                                    data[i][j] = 0;
+                            }
+                        }
+                        this.decoded.lumas[blk] = data;
+
+                    }
+
+
+                } else {
+
+                    var qpY = this.decoder.pps.pic_init_qp_minus26 + 26 + this.slice.slice_qp_delta;
+                    if (this.mbaddr !== this.slice.first_mb_in_slice) {
+                        qpY = (this.slice.decoder.mbs[this.mbaddr - 1].qpY + this.mb_qp_delta + 52) % 52;
+                    }
+                    this.qpY = qpY;
+
+                    for (var blk = 0; blk < 16; blk++) {
+                        var pm = this.getIntra4x4PredMode(blk);
+
+                        var data = [
+                            [0x80, 0x80, 0x80, 0x80],
+                            [0x80, 0x80, 0x80, 0x80],
+                            [0x80, 0x80, 0x80, 0x80],
+                            [0x80, 0x80, 0x80, 0x80]
+                        ];
+
+                        switch (pm) {
+                            case _defs.Intra_4x4_Vertical:
+                                var nB = _common.getNeighbourB4x4(blk);
+                                var sourceMb;
+                                if (nB[0] === _defs.MB_CURR) {
+                                    sourceMb = this;
+                                } else {
+                                    sourceMb = this.mbB;
                                 }
-                                if (data[i][j] > 255) {
-                                    data[i][j] = 255;
+                                var source = sourceMb.getBottom4(nB[1]);
+                                for (var i = 0; i < 4; i++) {
+                                    for (var j = 0; j < 4; j++) {
+                                        data[i][j] = source[j];
+                                    }
+                                }
+                                break;
+                            case _defs.Intra_4x4_Horizontal:
+                                var nA = _common.getNeighbourA4x4(blk);
+                                var sourceMb;
+                                if (nA[0] === _defs.MB_CURR) {
+                                    sourceMb = this;
+                                } else {
+                                    sourceMb = this.mbA;
+                                }
+                                var source = sourceMb.getRight4(nA[1]);
+                                for (var i = 0; i < 4; i++) {
+                                    for (var j = 0; j < 4; j++) {
+                                        data[i][j] = source[i];
+                                    }
+                                }
+                                break;
+                            case _defs.Intra_4x4_DC:
+                                var nA = _common.getNeighbourA4x4(blk);
+                                var nB = _common.getNeighbourB4x4(blk);
+                                var Amb = (nA[0] === _defs.MB_CURR) ? this : this.mbA;
+                                var Bmb = (nB[0] === _defs.MB_CURR) ? this : this.mbB;
+                                var sum = 0, n = 0;
+                                if (Amb === null && Bmb === null) {
+                                    /* default is 128, so do nothing */
+                                } else {
+                                    if (this.isNeighbourAvailable(Amb)) {
+                                        for (var i = 0; i < 4; i++) {
+                                            sum += Amb.getRight4(nA[1])[i];
+                                        }
+                                        sum += 2;
+                                        n += 4;
+                                    }
+                                    if (this.isNeighbourAvailable(Bmb)) {
+                                        for (var i = 0; i < 4; i++) {
+                                            sum += Bmb.getBottom4(nB[1])[i];
+                                        }
+                                        sum += 2;
+                                        n += 4;
+                                    }
+                                    var out;
+                                    if (this.isNeighbourAvailable(Amb) || this.isNeighbourAvailable(Bmb)) {
+                                        out = Math.floor(sum / n);
+                                    } else {
+                                        out = 128;
+                                    }
+                                    for (var i = 0; i < 4; i++) {
+                                        for (var j = 0; j < 4; j++) {
+                                            data[i][j] = out;
+                                        }
+                                    }
+                                }
+                                break;
+                            case _defs.Intra_4x4_Diagonal_Down_left:
+                                var nB = _common.getNeighbourB4x4(blk);
+                                var sourceMb;
+                                if (nB[0] === _defs.MB_CURR) {
+                                    sourceMb = this;
+                                } else {
+                                    sourceMb = this.mbB;
+                                }
+                                var source1 = sourceMb.getBottom4(nB[1]);
+
+                                var source2;
+                                var nC = _common.getNeighbourC4x4(blk);
+                                if (nC[0] === _defs.MB_CURR) {
+                                    sourceMb = this;
+                                    source2 = sourceMb.getBottom4(nC[1]);
+                                } else if (nC[0] === _defs.MB_C) {
+                                    sourceMb = this.mbC;
+                                    source2 = sourceMb.getBottom4(nC[1]);
+                                } else if (nC[0] === _defs.MB_B) {
+                                    sourceMb = this.mbB;
+                                    source2 = sourceMb.getBottom4(nC[1]);
+                                } else { /* MB_NA */
+                                    source2 = [source1[3], source1[3], source1[3], source1[3]];
+                                }
+
+                                var source = source1.concat(source2);
+                                for (var i = 4; i--;) {
+                                    for (var j = 4; j--;) {
+                                        if (i === 3 && j === 3) {
+                                            data[j][i] = (source[6] + 3 * source[7] + 2) >> 2;
+                                        } else {
+                                            data[j][i] = (source[i + j] + 2 * source[i + j + 1] + source[i + j + 2] + 2) >> 2;
+                                        }
+                                    }
+                                }
+                                break;
+                            case _defs.Intra_4x4_Diagonal_Down_Right:
+                                var nD = _common.getNeighbourD4x4(blk);
+                                var sourceMb;
+                                if (nD[0] === _defs.MB_CURR) {
+                                    sourceMb = this;
+                                } else if (nD[0] === _defs.MB_A) {
+                                    sourceMb = this.mbA;
+                                } else if (nD[0] === _defs.MB_B) {
+                                    sourceMb = this.mbB;
+                                } else if (nD[0] === _defs.MB_D) {
+                                    sourceMb = this.mbD;
+                                }
+                                var sourceD = sourceMb.getRight4(nD[1]);
+
+                                var nA = _common.getNeighbourA4x4(blk);
+                                if (nA[0] === _defs.MB_CURR) {
+                                    sourceMb = this;
+                                } else {
+                                    sourceMb = this.mbA;
+                                }
+                                var sourceA = sourceMb.getRight4(nA[1]);
+
+                                var nB = _common.getNeighbourB4x4(blk);
+                                var sourceMb;
+                                if (nB[0] === _defs.MB_CURR) {
+                                    sourceMb = this;
+                                } else {
+                                    sourceMb = this.mbB;
+                                }
+                                var sourceB = sourceMb.getBottom4(nB[1]);
+
+                                sourceA = [sourceD[3]].concat(sourceA);
+                                sourceB = [sourceD[3]].concat(sourceB);
+
+                                for (var i = 4; i--;) {
+                                    for (var j = 4; j--;) {
+                                        if (i > j) {
+                                            data[j][i] = (sourceB[i - j - 1] + 2 * sourceB[i - j] + sourceB[i - j + 1] + 2) >> 2;
+                                        } else if (i < j) {
+                                            data[j][i] = (sourceA[j - i - 1] + 2 * sourceB[j - i] + sourceB[j - i + 1] + 2) >> 2;
+                                        } else {
+                                            data[j][i] = (sourceB[1] + 2 * sourceB[0] + sourceA[1] + 2) >> 2;
+                                        }
+                                    }
+                                }
+                                break;
+                            case _defs.Intra_4x4_Vertical_Right:
+                                var nD = _common.getNeighbourD4x4(blk);
+                                var sourceMb;
+                                if (nD[0] === _defs.MB_CURR) {
+                                    sourceMb = this;
+                                } else if (nD[0] === _defs.MB_A) {
+                                    sourceMb = this.mbA;
+                                } else if (nD[0] === _defs.MB_B) {
+                                    sourceMb = this.mbB;
+                                } else if (nD[0] === _defs.MB_D) {
+                                    sourceMb = this.mbD;
+                                }
+                                var sourceD = sourceMb.getRight4(nD[1]);
+
+                                var nA = _common.getNeighbourA4x4(blk);
+                                if (nA[0] === _defs.MB_CURR) {
+                                    sourceMb = this;
+                                } else {
+                                    sourceMb = this.mbA;
+                                }
+                                var sourceA = sourceMb.getRight4(nA[1]);
+
+                                var nB = _common.getNeighbourB4x4(blk);
+                                var sourceMb;
+                                if (nB[0] === _defs.MB_CURR) {
+                                    sourceMb = this;
+                                } else {
+                                    sourceMb = this.mbB;
+                                }
+                                var sourceB = sourceMb.getBottom4(nB[1]);
+
+                                sourceA = [sourceD[3]].concat(sourceA);
+                                sourceB = [sourceD[3]].concat(sourceB);
+
+                                for (var i = 4; i--;) {
+                                    for (var j = 4; j--;) {
+                                        if ((2 * i - j === 0) || (2 * i - j === 2) || (2 * i - j === 4) || (2 * i - j === 6)) {
+                                            data[j][i] = (sourceB[i - (j >> 1)] + sourceB[i - (j >> 1) + 1] + 1) >> 1;
+                                        } else if ((2 * i - j === 1) || (2 * i - j === 3) || (2 * i - j === 5)) {
+                                            data[j][i] = (sourceB[i - (j >> 1) - 1] + 2 * sourceB[i - (j >> 1)] + sourceB[i - (j >> 1) + 1] + 2) >> 2;
+                                        } else if (2 * i - j === -1) {
+                                            data[j][i] = (sourceA[1] + 2 * sourceA[0] + sourceB[1] + 2) >> 2;
+                                        } else {
+                                            data[j][i] = (sourceA[j] + 2 * sourceA[j - 1] + sourceA[j - 2] + 2) >> 2;
+                                        }
+                                    }
+                                }
+                                break;
+                            case _defs.Intra_4x4_Horizontal_Down:
+                                var nD = _common.getNeighbourD4x4(blk);
+                                var sourceMb;
+                                if (nD[0] === _defs.MB_CURR) {
+                                    sourceMb = this;
+                                } else if (nD[0] === _defs.MB_A) {
+                                    sourceMb = this.mbA;
+                                } else if (nD[0] === _defs.MB_B) {
+                                    sourceMb = this.mbB;
+                                } else if (nD[0] === _defs.MB_D) {
+                                    sourceMb = this.mbD;
+                                }
+                                var sourceD = sourceMb.getRight4(nD[1]);
+
+                                var nA = _common.getNeighbourA4x4(blk);
+                                if (nA[0] === _defs.MB_CURR) {
+                                    sourceMb = this;
+                                } else {
+                                    sourceMb = this.mbA;
+                                }
+                                var sourceA = sourceMb.getRight4(nA[1]);
+
+                                var nB = _common.getNeighbourB4x4(blk);
+                                var sourceMb;
+                                if (nB[0] === _defs.MB_CURR) {
+                                    sourceMb = this;
+                                } else {
+                                    sourceMb = this.mbB;
+                                }
+                                var sourceB = sourceMb.getBottom4(nB[1]);
+
+                                sourceA = [sourceD[3]].concat(sourceA);
+                                sourceB = [sourceD[3]].concat(sourceB);
+
+                                for (var i = 4; i--;) {
+                                    for (var j = 4; j--;) {
+                                        if ((2 * j - i === 0) || (2 * j - i === 2) || (2 * j - i === 4) || (2 * j - i === 6)) {
+                                            data[j][i] = (sourceA[j - (i >> 1)] + sourceA[j - (i >> 1) + 1] + 1) >> 1;
+                                        } else if ((2 * j - i === 1) || (2 * j - i === 3) || (2 * j - i === 5)) {
+                                            data[j][i] = (sourceA[j - (i >> 1) - 1] + 2 * sourceA[j - (i >> 1)] + sourceA[j - (i >> 1) + 1] + 2) >> 2;
+                                        } else if (2 * j - i === -1) {
+                                            data[j][i] = (sourceA[1] + 2 * sourceA[0] + sourceB[1] + 2) >> 2;
+                                        } else {
+                                            data[j][i] = (sourceB[i] + 2 * sourceB[i - 1] + sourceB[i - 2] + 2) >> 2;
+                                        }
+                                    }
+                                }
+                                break;
+                            case _defs.Intra_4x4_Vertical_Left:
+                                var nB = _common.getNeighbourB4x4(blk);
+                                var sourceMb;
+                                if (nB[0] === _defs.MB_CURR) {
+                                    sourceMb = this;
+                                } else {
+                                    sourceMb = this.mbB;
+                                }
+                                var source1 = sourceMb.getBottom4(nB[1]);
+
+                                var source2;
+                                var nC = _common.getNeighbourC4x4(blk);
+                                if (nC[0] === _defs.MB_CURR) {
+                                    sourceMb = this;
+                                    source2 = sourceMb.getBottom4(nC[1]);
+                                } else if (nC[0] === _defs.MB_C) {
+                                    sourceMb = this.mbC;
+                                    source2 = sourceMb.getBottom4(nC[1]);
+                                } else if (nC[0] === _defs.MB_B) {
+                                    sourceMb = this.mbB;
+                                    source2 = sourceMb.getBottom4(nC[1]);
+                                } else { /* MB_NA */
+                                    source2 = [source1[3], source1[3], source1[3], source1[3]];
+                                }
+
+                                var source = source1.concat(source2);
+                                for (var i = 4; i--;) {
+                                    for (var j = 4; j--;) {
+                                        if (j === 0 || j === 2) {
+                                            data[j][i] = (source[i + (j >> 1)] + source[i + (j >> 1) + 1] + 1) >> 1;
+                                        } else {
+                                            data[j][i] = (source[i + (j >> 1)] + 2 * source[i + (j >> 1) + 1] + source[i + (j >> 1) + 2] + 2) >> 2;
+                                        }
+                                    }
+                                }
+                                break;
+                            case _defs.Intra_4x4_Horizontal_Up:
+                                var nA = _common.getNeighbourA4x4(blk);
+                                var sourceMb;
+                                if (nA[0] === _defs.MB_CURR) {
+                                    sourceMb = this;
+                                } else {
+                                    sourceMb = this.mbA;
+                                }
+                                var source = sourceMb.getRight4(nA[1]);
+
+                                for (var i = 4; i--;) {
+                                    for (var j = 4; j--;) {
+                                        if ((i + 2 * j === 0) || (i + 2 * j === 2) || (i + 2 * j === 4)) {
+                                            data[j][i] = (source[j + (i >> 1)] + source[j + (i >> 1) + 1] + 1) >> 1;
+                                        } else if ((i + 2 * j === 1) || (i + 2 * j === 3)) {
+                                            data[j][i] = (source[j + (i >> 1)] + 2 * source[j + (i >> 1) + 1] + source[j + (i >> 1) + 2] + 2) >> 2;
+                                        } else if (i + 2 * j === 5) {
+                                            data[j][i] = (source[2] + 3 * source[3] + 2) >> 2;
+                                        } else {
+                                            data[j][i] = source[3];
+                                        }
+                                    }
+                                }
+                                break;
+
+                        }
+                        //console.log('pred', JSON.stringify(data));
+                        if ((this.CodedBlockPattenLuma & (1 << (blk >> 2)))) {
+                            var lumas = this.LumaLevel[blk];
+
+                            var c = [
+                                [lumas[0], lumas[1], lumas[5], lumas[6]],
+                                [lumas[2], lumas[4], lumas[7], lumas[12]],
+                                [lumas[3], lumas[8], lumas[11], lumas[13]],
+                                [lumas[9], lumas[10], lumas[14], lumas[15]]
+                            ];
+
+
+                            var d = [
+                                [0, 0, 0, 0],
+                                [0, 0, 0, 0],
+                                [0, 0, 0, 0],
+                                [0, 0, 0, 0]
+                            ];
+                            for (var i = 0; i < 4; i++) {
+                                for (var j = 0; j < 4; j++) {
+                                    d[i][j] = (c[i][j] * _common.LevelScale(qpY % 6, i, j)) << Math.floor(qpY / 6);
+                                }
+                            }
+
+                            var e = [
+                                [d[0][0] + d[0][2], d[0][0] - d[0][2], (d[0][1] >> 1) - d[0][3], d[0][1] + (d[0][3] >> 1)],
+                                [d[1][0] + d[1][2], d[1][0] - d[1][2], (d[1][1] >> 1) - d[1][3], d[1][1] + (d[1][3] >> 1)],
+                                [d[2][0] + d[2][2], d[2][0] - d[2][2], (d[2][1] >> 1) - d[2][3], d[2][1] + (d[2][3] >> 1)],
+                                [d[3][0] + d[3][2], d[3][0] - d[3][2], (d[3][1] >> 1) - d[3][3], d[3][1] + (d[3][3] >> 1)],
+                            ];
+
+                            var f = [
+                                [e[0][0] + e[0][3], e[0][1] + e[0][2], e[0][1] - e[0][2], e[0][0] - e[0][3]],
+                                [e[1][0] + e[1][3], e[1][1] + e[1][2], e[1][1] - e[1][2], e[1][0] - e[1][3]],
+                                [e[2][0] + e[2][3], e[2][1] + e[2][2], e[2][1] - e[2][2], e[2][0] - e[2][3]],
+                                [e[3][0] + e[3][3], e[3][1] + e[3][2], e[3][1] - e[3][2], e[3][0] - e[3][3]],
+                            ];
+
+                            var g = [
+                                [f[0][0] + f[2][0], f[0][1] + f[2][1], f[0][2] + f[2][2], f[0][3] + f[2][3]],
+                                [f[0][0] - f[2][0], f[0][1] - f[2][1], f[0][2] - f[2][2], f[0][3] - f[2][3]],
+                                [(f[1][0] >> 1) - f[3][0], (f[1][1] >> 1) - f[3][1], (f[1][2] >> 1) - f[3][2], (f[1][3] >> 1) - f[3][3]],
+                                [f[1][0] + (f[3][0] >> 1), f[1][1] + (f[3][1] >> 1), f[1][2] + (f[3][2] >> 1), f[1][3] + (f[3][3] >> 1)]
+                            ];
+
+                            var h = [
+                                [g[0][0] + g[3][0], g[0][1] + g[3][1], g[0][2] + g[3][2], g[0][3] + g[3][3]],
+                                [g[1][0] + g[2][0], g[1][1] + g[2][1], g[1][2] + g[2][2], g[1][3] + g[2][3]],
+                                [g[1][0] - g[2][0], g[1][1] - g[2][1], g[1][2] - g[2][2], g[1][3] - g[2][3]],
+                                [g[0][0] - g[3][0], g[0][1] - g[3][1], g[0][2] - g[3][2], g[0][3] - g[3][3]],
+                            ];
+
+                            var r = [];
+                            for (var i = 0; i < 4; i++) {
+                                r[i] = [];
+                                for (var j = 0; j < 4; j++) {
+                                    r[i][j] = (h[i][j] + 32) >> 6;
+                                }
+                            }
+
+                            for (var i = 0; i < 4; i++) {
+                                for (var j = 0; j < 4; j++) {
+                                    data[i][j] += r[i][j];
+                                    if (data[i][j] < 0) {
+                                        data[i][j] = 0;
+                                    }
+                                    if (data[i][j] > 255) {
+                                        data[i][j] = 255;
+                                    }
                                 }
                             }
                         }
+                        this.decoded.lumas[blk] = data;
                     }
-                    this.decoded.lumas[blk] = data;
-                }
 
+                }
             }
+
         }
     };
 
-    function create(qb, slice) {
-        var ml = new Macroblock_layer(qb, slice);
+    function create(opts) {
+        var ml = new Macroblock_layer();
+        if (opts) {
+            for (var i in opts) {
+                ml[i] = opts[i];
+            }
+        }
         return ml;
     }
 

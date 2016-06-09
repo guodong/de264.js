@@ -28,6 +28,25 @@ define([
         return _defs.ND_MAP[blockIndex];
     }
 
+    function LevelScale(m, i, j) {
+        var v = [
+            [10, 16, 13],
+            [11, 18, 14],
+            [13, 20, 16],
+            [14, 23, 18],
+            [16, 25, 20],
+            [18, 29, 23]
+        ];
+
+        if ((i === 0 && j === 0) || (i === 0 && j === 2) || (i === 2 && j === 0) || (i === 2 && j === 2)) {
+            return v[m][0];
+        } else if ((i === 1 && j === 1) || (i === 1 && j === 3) || (i === 3 && j === 1) || (i === 3 && j === 3)) {
+            return v[m][1];
+        } else {
+            return v[m][2];
+        }
+    }
+
     /*
      Check if neighbour macroblock is available. Neighbour macroblock
      is considered available if it is within the picture and belongs
@@ -62,6 +81,7 @@ define([
         getNeighbourC4x4: getNeighbourC4x4,
         getNeighbourD4x4: getNeighbourD4x4,
         isNeighbourAvailable: isNeighbourAvailable,
+        LevelScale: LevelScale,
         clip3: clip3,
         clip1: clip1
     };

@@ -7,12 +7,25 @@ define(function() {
 
     //noinspection JSAnnotator
     return {
+        /* nal types */
+        NAL_SLICE: 1,
+        NAL_SLICE_IDR: 5,
+        NAL_SPS: 7,
+        NAL_PPS: 8,
+        
+        /* slice types */
         P_SLICE: 0,
         I_SLICE: 2,
+        
+        /* macroblock types */
+        I_MB: 0,
+        P_MB: 1,
 
         /* MbPartPredMode */
         Intra_4x4: 0,
         Intra_16x16: 1,
+        Pred_L0: 2,
+        Pred_Na: 3,
 
         PRED_MODE_INTRA4x4: 0,
         PRED_MODE_INTRA16x16: 1,
@@ -29,8 +42,6 @@ define(function() {
         I_4x4: 0,
         I_16x16_0_0_0: 1,
         I_PCM: 25,
-
-        B_Direct_8x8: 0,
 
         /* neighbourMb */
         MB_A: MB_A,
