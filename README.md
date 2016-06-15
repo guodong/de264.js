@@ -1,2 +1,2 @@
 # de264.js
-Javascript h.264 decoder
+H.264 decoder in pure javascript
