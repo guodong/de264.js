@@ -27,6 +27,8 @@ define(function() {
             var needBytes = Math.floor((this.bitindex + numBits - 1) / 8) - Math.floor(this.bitindex / 8) + 1;
             var bytes = new Array(needBytes);
             for (var i = 0; i < needBytes; i++) {
+                if (bytepos + i >= this.buf.byteLength)
+                    console.log(bytepos + i);
                 bytes[i] = this.dv.getUint8(bytepos + i);
             }
 
@@ -68,7 +70,8 @@ define(function() {
                 return this.deqUe();
             } else {
                 var val = this.getBits(1);
-                return val ^= 0x1;
+                val ^= 0x1;
+                return val;
             }
         },
         deqMe: function(isIntra) {
@@ -84,6 +87,7 @@ define(function() {
         },
         more_rbsp_data: function() {
             var bits = this.buf.byteLength * 8 - this.bitindex;
+            //console.log('bits', bits);
             if (bits === 0) {
                 return false;
             }

@@ -31,14 +31,20 @@ define(function() {
         PRED_MODE_INTRA16x16: 1,
         PRED_MODE_INTER: 2,
 
+        /* mb_type names of P mb */
         P_L0_16x16: 0,
         P_L0_L0_16x8: 1,
         P_L0_L0_8x16: 2,
         P_8x8: 3,
         P_8x8ref0: 4,
-        P_Skip: 5,
+        P_Skip: 128,
+        
+        P_L0_8x8: 0,
+        P_L0_8x4: 1,
+        P_L0_4x8: 2,
+        P_L0_4x4: 3,
 
-        /* Name of mb_type */
+        /* mb_type names of I mb */
         I_4x4: 0,
         I_16x16_0_0_0: 1,
         I_PCM: 25,
@@ -129,6 +135,9 @@ define(function() {
          *      8  9 12 13     8  9  10 11
          *     10 11 14 15     12 13 14 15
          */
-        map4x4to16x16: [0, 1, 4, 5, 2, 3, 6, 7, 8, 9, 12, 13, 10, 11, 14, 15]
+        map4x4to16x16: [0, 1, 4, 5, 2, 3, 6, 7, 8, 9, 12, 13, 10, 11, 14, 15],
+        
+        SHORT_TERM: 0,
+        LONG_TERM: 1
     };
 });

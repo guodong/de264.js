@@ -1,14 +1,17 @@
 /**
  * Created by gd on 16/5/9.
  */
-define(['de264/queuebuffer'], function(_queuebuffer) {
+define([
+    'de264/queuebuffer',
+    'de264/util'
+], function(_queuebuffer, _util) {
 
 
     function Sps(buf) {
         this.buf = buf;
         this.dv = new DataView(this.buf);
     }
-    
+
     Sps.prototype = {
         parse: function() {
             var qb = _queuebuffer.create(this.buf);
@@ -143,15 +146,15 @@ define(['de264/queuebuffer'], function(_queuebuffer) {
             }
 
             console.log(this);
-            
+
         }
     };
-    
+
     function create(buf) {
         var sps = new Sps(buf);
         return sps;
     }
-    
+
     return {
         create: create
     };

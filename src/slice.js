@@ -7,8 +7,9 @@ define([
     'de264/defs',
     'de264/common',
     'de264/macroblock_layer',
-    'de264/util'
-], function(_queuebuffer, _slice_header, _defs, _common, _macroblock_layer, _util) {
+    'de264/util',
+    'de264/dpb'
+], function(_queuebuffer, _slice_header, _defs, _common, _macroblock_layer, _util, _dpb) {
 
     function yuv2canvas(yuv, width, height, canvas) {
 
@@ -63,6 +64,10 @@ define([
             this.first_mb_in_slice = qb.deqUe();
             this.slice_type = qb.deqUe();
             this.pic_parameter_set_id = qb.deqUe();
+            
+            /* active pps and sps */
+            this.decoder.activateParamSets(this.pic_parameter_set_id);
+            
             this.frame_num = qb.deqBits(this.nal.decoder.sps.log2_max_frame_num_minus4 + 4);
 
             if (this.nal.nal_unit_type === 5) {
@@ -100,12 +105,15 @@ define([
             if (!_common.isISlice(this.slice_type)) {
                 this.ref_pic_list_reordering_flag_l0 = qb.deqBits(1);
                 if (this.ref_pic_list_reordering_flag_l0) {
+                    this.ref_pic_list_reordering = [];
+                    var i = 0;
                     do {
-                        this.reordering_of_pic_nums_idc = qb.deqUe();
+                        this.ref_pic_list_reordering[i] = {};
+                        this.ref_pic_list_reordering[i].reordering_of_pic_nums_idc = qb.deqUe();
                         if (this.reordering_of_pic_nums_idc === 0 || this.reordering_of_pic_nums_idc === 1) {
-                            this.abs_diff_pic_num_minus1 = qb.deqUe();
+                            this.ref_pic_list_reordering[i].abs_diff_pic_num_minus1 = qb.deqUe();
                         } else if (this.reordering_of_pic_nums_idc === 2) {
-                            this.long_term_pic_num = qb.deqUe();
+                            this.ref_pic_list_reordering[i].long_term_pic_num = qb.deqUe();
                         }
                     } while (this.reordering_of_pic_nums_idc !== 3);
                 }
@@ -175,6 +183,11 @@ define([
             }
             console.log('header', this.qb.bitindex, this);
             /* slice_header() end*/
+            _dpb.initRefPicList();
+            if (this.ref_pic_list_reordering_flag_l0) {
+                _dpb.reorderRefPicList(this);
+            }
+
 
             /* slice_data() */
             //var MbaffFrameFlag = this.nal.decoder.sps.mb_adaptive_frame_field_flag && !this.field_pic_flag;
@@ -220,36 +233,21 @@ define([
                         prevMbSkipped = (this.mb_skip_run > 0);
                         for (var i = 0; i < this.mb_skip_run; i++) {
                             var mb = this.decoder.mbs[CurrMbAddr];
+                            this.decoder.currMb = mb;
                             mb.slice = this;
+                            mb.mb_type = _defs.P_Skip;
+                            mb.type = _defs.P_MB;
                             for (var j = 0; j < mb.totalCoeff.length; j++) {
                                 mb.totalCoeff[j] = 0;
                             }
+                            for (var j = 0; j < mb.prev_intra4x4_pred_mode_flag.length; j++) {
+                                mb.prev_intra4x4_pred_mode_flag[j] = 0;
+                            }
+                            for (var j = 0; j < mb.rem_intra4x4_pred_mode.length; j++) {
+                                mb.rem_intra4x4_pred_mode[j] = 0;
+                            }
                             mb.decode();
-                            // var mb = this.decoder.mbs[CurrMbAddr];
-                            // mb.slice = this;
-                            /* init mbA, mbB, mbC */
-                            // var pw = this.decoder.sps.pic_width_in_mbs_minus1 + 1;
-                            // var ph = this.decoder.sps.pic_height_in_map_units_minus1 + 1;
-                            // if (CurrMbAddr % pw) {
-                            //     mb.mbA = this.decoder.mbs[CurrMbAddr - 1];
-                            // } else {
-                            //     mb.mbA = null;
-                            // }
-                            // if (Math.floor(CurrMbAddr / pw)) {
-                            //     mb.mbB = this.decoder.mbs[CurrMbAddr - pw];
-                            // } else {
-                            //     mb.mbB = null;
-                            // }
-                            // if ((mb.mbB !== null) && (CurrMbAddr % pw !== (pw - 1))) {
-                            //     mb.mbC = this.decoder.mbs[mb.mbB.mbaddr + 1];
-                            // } else {
-                            //     mb.mbC = null;
-                            // }
-                            // if (mb.mbA !== null && mb.mbB !== null) {
-                            //     mb.mbD = this.decoder.mbs[mb.mbB.mbaddr - 1];
-                            // } else {
-                            //     mb.mbD = null;
-                            // }
+
                             CurrMbAddr = NextMbAddress(CurrMbAddr);
                         }
                         moreDataFlag = qb.more_rbsp_data();
@@ -259,14 +257,18 @@ define([
                 }
 
                 if (moreDataFlag) {
-                    // if (MbaffFrameFlag && (CurrMbAddr % 2 === 0 || (CurrMbAddr % 2 === 1 && prevMbSkipped))) {
-                    //     this.mb_field_decoding_flag = qb.deqBits(1);
-                    // }
                     /* macroblock_layer() */
                     var mb = this.decoder.mbs[CurrMbAddr];
+                    this.decoder.currMb = mb;
                     mb.slice = this;
                     for (var j = 0; j < mb.totalCoeff.length; j++) {
                         mb.totalCoeff[j] = 0;
+                    }
+                    for (var j = 0; j < mb.prev_intra4x4_pred_mode_flag.length; j++) {
+                        mb.prev_intra4x4_pred_mode_flag[j] = 0;
+                    }
+                    for (var j = 0; j < mb.rem_intra4x4_pred_mode.length; j++) {
+                        mb.rem_intra4x4_pred_mode[j] = 0;
                     }
 
                     /* parse bit stream */
@@ -274,24 +276,28 @@ define([
 
                     mb.decode();
                     console.log(CurrMbAddr, mb.mb_type, this.qb.bitindex, mb);
-                    // if (mb.mbaddr === (pw * ph - 1)) {
-                    //     var yuv = new Array(pw * ph * 16 * 16 * 3 / 2);
-                    //     for (var i = 0; i < yuv.length; i++){
-                    //         yuv[i] = 128;
-                    //     }
-                    //     for (var i = 0; i < pw * ph; i++) {
-                    //         for (var j = 0; j < 16; j++) {
-                    //             var luma4x4 = this.decoder.mbs[i].decoded.lumas[j];
-                    //             for (var x = 0; x < 4; x++) {
-                    //                 for (var y = 0; y < 4; y++) {
-                    //                     yuv[pw * 16 * (Math.floor(i / pw) * 16 + 4 * (_defs.map4x4to16x16[j] >> 2) + x) + 16 * (i % pw) + 4 * (_defs.map4x4to16x16[j] % 4) + y] = luma4x4[x][y];
-                    //                 }
-                    //             }
-                    //         }
-                    //
-                    //     }
-                    //     yuv2canvas(yuv, pw * 16, ph * 16, can);
-                    // }
+
+                    var pw = this.decoder.sps.pic_width_in_mbs_minus1 + 1;
+                    var ph = this.decoder.sps.pic_height_in_map_units_minus1 + 1;
+                    if (mb.mbaddr === (pw * ph - 1)) {
+                        this.decoder.resetCurrImage();
+                        var yuv = new Array(pw * ph * 16 * 16 * 3 / 2);
+                        for (var i = 0; i < yuv.length; i++){
+                            yuv[i] = 128;
+                        }
+                        for (var i = 0; i < pw * ph; i++) {
+                            for (var j = 0; j < 16; j++) {
+                                var luma4x4 = this.decoder.mbs[i].decoded.lumas[j];
+                                for (var x = 0; x < 4; x++) {
+                                    for (var y = 0; y < 4; y++) {
+                                        yuv[pw * 16 * (Math.floor(i / pw) * 16 + 4 * (_defs.map4x4to16x16[j] >> 2) + x) + 16 * (i % pw) + 4 * (_defs.map4x4to16x16[j] % 4) + y] = luma4x4[x][y];
+                                    }
+                                }
+                            }
+
+                        }
+                        yuv2canvas(yuv, pw * 16, ph * 16, can);
+                    }
                     /* macroblock_layer() end */
                 }
                 moreDataFlag = qb.more_rbsp_data();
@@ -301,8 +307,8 @@ define([
     };
 
 
-    function create(buf, sps, pps) {
-        var slice = new Slice(buf, sps, pps);
+    function create(buf, decoder) {
+        var slice = new Slice(buf, decoder);
         return slice;
     }
 

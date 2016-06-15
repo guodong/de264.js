@@ -27,10 +27,29 @@ define(function() {
         }
     };
 
+    var debug = {
+        info: function() {
+            var args = [].slice.call(arguments);
+            args.unshift('%c Info:', 'color: blue; font-weight: bold; font-style: italic');
+            console.log.apply(console, args);
+        },
+        error: function() {
+            var args = [].slice.call(arguments);
+            args.unshift('%c Error:', 'color: red; font-weight: bold; font-style: italic');
+            console.log.apply(console, args);
+        },
+        warning: function() {
+            var args = [].slice.call(arguments);
+            args.unshift('%c Warning:', 'color: #FF6600; font-weight: bold; font-style: italic');
+            console.log.apply(console, args);
+        },
+
+    };
     
     return {
         min: min,
         max: max,
-        matrix: matrix
+        matrix: matrix,
+        debug: debug
     };
 });

@@ -46,6 +46,33 @@ define([
             return v[m][2];
         }
     }
+    
+    function inverseRasterScan(a, b, c, d, e) {
+        if (e === 0) {
+            return (a % (d / b)) * b;
+        } else {
+            return (a / (d / b)) * c;
+        }
+    }
+    
+    function medianFilter(a, b, c) {
+        var max = a,
+            min = a,
+            med = a;
+        if (b > max) {
+            max = b;
+        } else if (b < min) {
+            min = b;
+        }
+        if (c > max) {
+            med = max;
+        } else if (c < min) {
+            med = min;
+        } else {
+            med = c;
+        }
+        return med;
+    }
 
     /*
      Check if neighbour macroblock is available. Neighbour macroblock
@@ -82,7 +109,9 @@ define([
         getNeighbourD4x4: getNeighbourD4x4,
         isNeighbourAvailable: isNeighbourAvailable,
         LevelScale: LevelScale,
+        inverseRasterScan: inverseRasterScan,
         clip3: clip3,
-        clip1: clip1
+        clip1: clip1,
+        medianFilter: medianFilter
     };
 });

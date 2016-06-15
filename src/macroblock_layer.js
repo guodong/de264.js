@@ -5,8 +5,9 @@ define([
     'de264/common',
     'de264/defs',
     'de264/queuebuffer',
-    'de264/util'
-], function(_common, _defs, _queuebuffer, _util) {
+    'de264/util',
+    'de264/subMb'
+], function(_common, _defs, _queuebuffer, _util, _subMb) {
 
     var coeff_map_nc_0_2 = {
         0x00018000: [0, 0],
@@ -504,32 +505,6 @@ define([
     }
     ];
 
-    var MbPartPredMode = function(mb_type, isIMb) {
-        if (isIMb) {
-            if (mb_type === 0) {
-                return _defs.PRED_MODE_INTRA4x4;
-            } else {
-                return _defs.PRED_MODE_INTRA16x16;
-            }
-        } else {
-            return _defs.PRED_MODE_INTER;
-        }
-    };
-    
-    /* TODO: check MB type, I MB has no part */
-    var NumMbPart = function(mb_type) {
-        switch (mb_type) {
-            case _defs.P_L0_16x16:
-            case _defs.P_Skip:
-                return 1;
-            case  _defs.P_L0_L0_16x8:
-            case _defs.P_L0_L0_8x16:
-                return 2;
-            default: /* P_8x8, P_8x8ref0 */
-                return 4;
-
-        }
-    };
     var NumSubMbPart = function(sub_mb_type) {
         switch (sub_mb_type) {
             case 0:
@@ -541,68 +516,6 @@ define([
                 return 4;
         }
     };
-
-    function sub_mb_pred(mb_type) {
-        var qb = this.qb;
-        this.sub_mb_type = [];
-        for (var mbPartIdx = 0; mbPartIdx < 4; mbPartIdx++) {
-            this.sub_mb_type[mbPartIdx] = qb.deqUe();
-        }
-        this.ref_idx_l0 = [];
-        for (var mbPartIdx = 0; mbPartIdx < 4; mbPartIdx++) { /* SubMbPredMode(sub_mb_type[mbPartIdx]) is Prd_L0 for P slice */
-            if ((this.num_ref_idx_l0_active_minus1 > 0 || this.mb_field_decoding_flag) && mb_type !== _defs.P_8x8ref0 && this.sub_mb_type[mbPartIdx] !== _defs.B_Direct_8x8) { // TODO: SubMbPredMode()
-                this.ref_idx_l0[mbPartIdx] = qb.deqTe(this.num_ref_idx_l0_active_minus1 > 1);
-            }
-        }
-
-        /* SubMbPredMode(sub_mb_type[mbPartIdx]) is Prd_L0 for P slice, so no need to parse ref_idx_l1 */
-
-        this.mvd_l0 = [];
-        for (var mbPartIdx = 0; mbPartIdx < 4; mbPartIdx++) {
-            this.mvd_l0[mbPartIdx] = [];
-            if (this.sub_mb_type[mbPartIdx] !== _defs.B_Direct_8x8) {
-                for (var subMbPartIdx = 0; subMbPartIdx < NumSubMbPart(this.sub_mb_type[mbPartIdx]); subMbPartIdx++) {
-                    this.mvd_l0[mbPartIdx][subMbPartIdx] = [];
-                    for (var compIdx = 0; compIdx < 2; compIdx++) {
-                        this.mvd_l0[mbPartIdx][subMbPartIdx][compIdx] = qb.deqSe();
-                    }
-                }
-            }
-        }
-        /* SubMbPredMode(sub_mb_type[mbPartIdx]) is Prd_L0 for P slice, so no need to parse follow */
-    }
-
-    function mb_pred(mb_type) {
-        var qb = this.qb;
-        switch (this.mbPartPredMode) {
-            case _defs.Pred_L0:
-            case _defs.Pred_Na:
-                if (this.num_ref_idx_l0_active_minus1 > 0) {
-                    this.ref_idx_l0 = [];
-                    for (var i = NumMbPart(mb_type), j = 0; i--; j++) {
-                        this.ref_idx_l0[j] = qb.deqTe((this.num_ref_idx_l0_active_minus1 > 1));
-                    }
-                }
-                this.mvd_l0 = [];
-                for (var i = NumMbPart(mb_type), j = 0; i--; j++) {
-                    this.mvd_l0[j] = {hor: qb.deqSe(), ver: qb.deqSe()};
-                }
-                break;
-            case _defs.Intra_4x4:
-                this.prev_intra4x4_pred_mode_flag = [];
-                this.rem_intra4x4_pred_mode = [];
-                for (var luma4x4BlkIdx = 0; luma4x4BlkIdx < 16; luma4x4BlkIdx++) {
-                    this.prev_intra4x4_pred_mode_flag[luma4x4BlkIdx] = qb.deqBits(1);
-                    if (!this.prev_intra4x4_pred_mode_flag[luma4x4BlkIdx]) {
-                        this.rem_intra4x4_pred_mode[luma4x4BlkIdx] = qb.deqBits(3);
-                    }
-                }
-            /* falls through */
-            case _defs.Intra_16x16:
-                this.intra_chroma_pred_mode = qb.deqUe();
-                break;
-        }
-    }
 
     function calcNC(blockIndex) {
         var neighbourA = _common.getNeighbourA4x4(blockIndex);
@@ -686,6 +599,7 @@ define([
                 }
             }
         }
+        console.log('nc', nc, state);
     }
 
     function decodeLevelPrefix(qb) {
@@ -940,6 +854,42 @@ define([
         }
     }
 
+    function edgeBoundaryStrength(mb1, mb2, ind1, ind2) {
+
+        if (mb1.totalCoeff[ind1] || mb2.totalCoeff[ind2]) {
+            return 2;
+        }
+        else if ((mb1.refAddr[ind1 >> 2] != mb2.refAddr[ind2 >> 2]) ||
+            (Math.abs(mb1.mv[ind1].hor - mb2.mv[ind2].hor) >= 4) ||
+            (Math.abs(mb1.mv[ind1].ver - mb2.mv[ind2].ver) >= 4)) {
+            return 1;
+        }
+        else
+            return 0;
+    }
+
+    function InnerBoundaryStrength(mb1, ind1, ind2) {
+        var tmp1, tmp2;
+        var mv1, mv2, mv3, mv4;
+
+        tmp1 = mb1.totalCoeff[ind1];
+        tmp2 = mb1.totalCoeff[ind2];
+        mv1 = mb1.mv[ind1].hor;
+        mv2 = mb1.mv[ind2].hor;
+        mv3 = mb1.mv[ind1].ver;
+        mv4 = mb1.mv[ind2].ver;
+
+        if (tmp1 || tmp2) {
+            return 2;
+        }
+        else if ((Math.abs(mv1 - mv2) >= 4) || (Math.abs(mv3 - mv4) >= 4) ||
+            (mb1.refAddr[ind1 >> 2] != mb1.refAddr[ind2 >> 2])) {
+            return 1;
+        }
+        else
+            return 0;
+    }
+
     function Macroblock_layer(qb, slice) {
         this.qb = qb;
         this.slice = slice;
@@ -960,8 +910,14 @@ define([
             [], [], [], [],
         ];
         this.decoded = {
-            lumas: []
+            lumas: new Array(16)
         };
+        this.prev_intra4x4_pred_mode_flag = [];
+        this.rem_intra4x4_pred_mode = [];
+        this.mvs = new Array(16);
+        this.sub_mb_type = new Array(4);
+        this.subMbs = [];
+        this.refPic = new Array(4);
     }
 
     Macroblock_layer.prototype = {
@@ -980,9 +936,44 @@ define([
                     this.type = _defs.P_MB;
                     if (this.mb_type === 0 || this.mb_type === 1 || this.mb_type === 2 || this.mb_type === 100) { /* mb_type 100 for P_Skip */
                         this.mbPartPredMode = _defs.Pred_L0;
+                    } else {
+                        this.mbPartPredMode = _defs.Pred_Na;
                     }
                 }
             }
+
+
+            /* init sub macroblocks */
+            if (this.type === _defs.P_MB) {
+                switch (this.mb_type) {
+                    case _defs.P_L0_16x16:
+                    case _defs.P_Skip:
+                        this.numMbPart = 1;
+                        this.mbPartWidth = 16;
+                        this.mbPartHeight = 16;
+                        break;
+                    case _defs.P_L0_L0_16x8:
+                        this.numMbPart = 2;
+                        this.mbPartWidth = 16;
+                        this.mbPartHeight = 8;
+                        break;
+                    case _defs.P_L0_L0_8x16:
+                        this.numMbPart = 2;
+                        this.mbPartWidth = 8;
+                        this.mbPartHeight = 16;
+                        break;
+                    default:
+                        this.numMbPart = 4;
+                        this.mbPartWidth = 8;
+                        this.mbPartHeight = 8;
+                        break;
+                }
+            }
+            for (var i = 0; i < this.numMbPart; i++) {
+                this.subMbs[i] = _subMb.create();
+            }
+            /* init sub macroblocks end */
+
 
             if (this.mb_type === _defs.I_PCM) { /* I_PCM */
                 while (!qb.isAligned()) {
@@ -993,14 +984,13 @@ define([
                     this.pcm_byte[i] = qb.deqBits(8);
                 }
             } else {
-                var noSubMbPartSizeLessThan8x8Flag = 1;
-                if (this.mbPartPredMode !== _defs.Intra_4x4 && this.mbPartPredMode !== _defs.Intra_16x16 && NumMbPart(this.mb_type) === 4) {
+                if (this.mbPartPredMode !== _defs.Intra_4x4 && this.mbPartPredMode !== _defs.Intra_16x16 && this.numMbPart === 4) {
                     /* sub_mb_pred() */
-                    sub_mb_pred.call(this, this.mb_type);
+                    this.subMbPred();
                     /* sub_mb_pred() end*/
                 } else {
                     /* mb_pred() */
-                    mb_pred.call(this, this.mb_type);
+                    this.mbPred();
                     /* mb_pred() end */
                 }
 
@@ -1027,6 +1017,53 @@ define([
                     residual.call(this, this.mb_type);
                 } else {
                     this.mb_qp_delta = 0;
+                }
+            }
+        },
+        mbPred: function() {
+            var qb = this.qb;
+            if (this.mbPartPredMode === _defs.Intra_4x4 || this.mbPartPredMode === _defs.Intra_16x16) {
+                if (this.mbPartPredMode === _defs.Intra_4x4) {
+                    for (var luma4x4BlkIdx = 0; luma4x4BlkIdx < 16; luma4x4BlkIdx++) {
+                        this.prev_intra4x4_pred_mode_flag[luma4x4BlkIdx] = qb.deqBits(1);
+                        if (!this.prev_intra4x4_pred_mode_flag[luma4x4BlkIdx]) {
+                            this.rem_intra4x4_pred_mode[luma4x4BlkIdx] = qb.deqBits(3);
+                        }
+                    }
+                }
+                this.intra_chroma_pred_mode = qb.deqUe();
+            } else {
+                for (var mbPartIdx = 0; mbPartIdx < this.numMbPart; mbPartIdx++) {
+                    if (this.slice.num_ref_idx_l0_active_minus1 > 0) {
+                        this.ref_idx_l0 = [];
+                        this.ref_idx_l0[mbPartIdx] = qb.deqTe((this.slice.num_ref_idx_l0_active_minus1 > 1));
+                    }
+                }
+                this.mvd_l0 = [];
+                for (var mbPartIdx = 0; mbPartIdx < this.numMbPart; mbPartIdx++) {
+                    this.mvd_l0[mbPartIdx] = {hor: qb.deqSe(), ver: qb.deqSe()};
+                }
+            }
+        },
+        subMbPred: function() {
+            var qb = this.qb;
+            for (var mbPartIdx = 0; mbPartIdx < 4; mbPartIdx++) {
+                this.subMbs[mbPartIdx].setSubMbType(qb.deqUe());
+            }
+            this.ref_idx_l0 = [];
+            for (var mbPartIdx = 0; mbPartIdx < 4; mbPartIdx++) { /* SubMbPredMode(sub_mb_type[mbPartIdx]) is Prd_L0 for P slice */
+                if ((this.slice.num_ref_idx_l0_active_minus1 > 0) && mb_type !== _defs.P_8x8ref0 && this.sub_mb_type[mbPartIdx] !== _defs.B_Direct_8x8) {
+                    this.ref_idx_l0[mbPartIdx] = qb.deqTe(this.slice.num_ref_idx_l0_active_minus1 > 1);
+                }
+            }
+
+            /* SubMbPredMode(sub_mb_type[mbPartIdx]) is Prd_L0 for P slice, so no need to parse ref_idx_l1 */
+
+            this.mvd_l0 = [];
+            for (var mbPartIdx = 0; mbPartIdx < 4; mbPartIdx++) {
+                this.mvd_l0[mbPartIdx] = [];
+                for (var subMbPartIdx = 0; subMbPartIdx < this.subMbs[mbPartIdx].numSubMbPart; subMbPartIdx++) {
+                    this.mvd_l0[mbPartIdx][subMbPartIdx] = {hor: qb.deqSe(), ver: qb.deqSe()};
                 }
             }
         },
@@ -1151,6 +1188,9 @@ define([
                 return false;
             }
             return true;
+        },
+        getInterNeighbourA: function(index) {
+
         },
         decode: function() {
             if (this.type === _defs.I_MB) {
@@ -1470,6 +1510,9 @@ define([
                                     sourceMb = this;
                                 } else {
                                     sourceMb = this.mbA;
+                                }
+                                if (!sourceMb) {
+                                    return;
                                 }
                                 var source = sourceMb.getRight4(nA[1]);
                                 for (var i = 0; i < 4; i++) {
@@ -1830,10 +1873,753 @@ define([
                     }
 
                 }
+            } else { /* P_MB */
+                this.interPrediction();
             }
 
+        },
+        interPrediction: function() {
+            var row = (this.mbaddr / this.decoder.widthInMb) << 4;
+            var col = (this.mbaddr - row * this.decoder.widthInMb) << 4;
+            var refImage = {
+                width: this.decoder.widthInMb,
+                height: this.decoder.heightInMb
+            };
+
+            switch (this.mb_type) {
+                case _defs.P_Skip:
+                case _defs.P_L0_16x16:
+                    this.mvPrediction16x16();
+                    break;
+            }
+        },
+        getInterNeighbour: function(mb, index) {
+            var n = {
+                avaliable: 0,
+                refIndex: 0xFFFFFFFF,
+                mv: {
+                    hor: 0,
+                    ver: 0
+                }
+            };
+            if (mb && mb.slice === this.slice) {
+                var tmp = mb.mb_type;
+                n.avaliable = 1;
+                if (tmp <= _defs.P_8x8ref0) {
+                    var tmpMv = mb.mv[index];
+                    tmp = mb.refPic[index >> 2];
+                    n.refIndex = tmp;
+                    n.mv = tmpMv;
+                }
+            }
+            return n;
+        },
+        mvPrediction16x16: function() {
+            var refIndex = this.ref_idx_l0[0];
+            var na = this.getInterNeighbour(this.mbA, 5);
+            var nb = this.getInterNeighbour(this.mbB, 10);
+            var mv = {hor: 0, ver: 0};
+            if (!na.avaliable || !nb.avaliable || (na.refIndex === 0 && (na.mv.hor === 0 && na.mv.ver === 0)) || (nb.refIndex === 0 && (nb.mv.hor === 0 && nb.mv.ver === 0))) {
+                mv.hor = mv.ver = 0;
+            } else {
+                mv = this.mvd_l0[0];
+                var nc = this.getInterNeighbour(this.mbC, 10);
+                if (!nc.avaliable) {
+                    nc = this.getInterNeighbour(this.mbD, 15);
+                }
+
+                var mvPred = {};
+                if (na.avaliable || nb.avaliable || nc.avaliable) {
+                    var isA = (na.refIndex === refIndex) ? 1 : 0;
+                    var isB = (nb.refIndex === refIndex) ? 1 : 0;
+                    var isC = (nc.refIndex === refIndex) ? 1 : 0;
+                    if ((isA + isB + isC) !== 1) {
+                        mvPred.hor = _common.medianFilter(na.mv.hor, nb.mv.hor, nc.mv.hor);
+                        mvPred.ver = _common.medianFilter(na.mv.ver, nb.mv.ver, nc.mv.ver);
+                    } else if (isA) {
+                        mvPred = na.mv;
+                    } else if (isB) {
+                        mvPred = nb.mv;
+                    } else {
+                        mvPred = nc.mv;
+                    }
+                } else {
+                    mvPred = na.mv;
+                }
+                mv.hor += mvPred.hor;
+                mv.ver += mvPred.ver;
+            }
+
+            for (var i = 0; i < 16; i++) {
+                this.mvs[i] = mv;
+            }
+            for (var i = 0; i < 4; i++) {
+                this.refPic[i] = refIndex;
+            }
+        },
+        getBoundaryStrengths: function(bS, flags) {
+            var mb4x4Index = [0, 1, 4, 5, 2, 3, 6, 7, 8, 9, 12, 13, 10, 11, 14, 15];
+            for (var i = 0; i < bS.length; i++) {
+                bS[i] = {
+                    top: 0,
+                    left: 0
+                };
+            }
+            var nonZeroBs = false;
+            if (flags.filter_top_edge) {
+                if (this.type === _defs.I_MB || this.mbB.type === _defs.I_MB) {
+                    for (var i = 0; i < 4; i++) {
+                        bS[i] = {
+                            top: 4
+                        };
+                    }
+                    nonZeroBs = true;
+                } else {
+                    bS[0] = {
+                        top: edgeBoundaryStrength(this, this.mbB, 0, 10)
+                    };
+                    bS[1] = {
+                        top: edgeBoundaryStrength(this, this.mbB, 1, 11)
+                    };
+                    bS[2] = {
+                        top: edgeBoundaryStrength(this, this.mbB, 4, 14)
+                    };
+                    bS[3] = {
+                        top: edgeBoundaryStrength(this, this.mbB, 5, 15)
+                    };
+                    if (bS[0].top || bS[1].top || bS[2].top || bS[3].top) {
+                        nonZeroBs = true;
+                    }
+                }
+            } else {
+                bS[0] = {
+                    top: 0
+                };
+                bS[1] = {
+                    top: 0
+                };
+                bS[2] = {
+                    top: 0
+                };
+                bS[3] = {
+                    top: 0
+                };
+            }
+            if (flags.filter_left_edge) {
+                if (this.type === _defs.I_MB || this.mbB.type === _defs.I_MB) {
+                    for (var i = 0; i < 4; i += 4) {
+                        bS[i] = {
+                            left: 4
+                        };
+                    }
+                    nonZeroBs = true;
+                } else {
+                    bS[0] = {
+                        top: edgeBoundaryStrength(this, this.mbB, 0, 5)
+                    };
+                    bS[4] = {
+                        top: edgeBoundaryStrength(this, this.mbB, 2, 7)
+                    };
+                    bS[8] = {
+                        top: edgeBoundaryStrength(this, this.mbB, 8, 13)
+                    };
+                    bS[12] = {
+                        top: edgeBoundaryStrength(this, this.mbB, 10, 15)
+                    };
+                    if (!nonZeroBs && (bS[0].top || bS[4].top || bS[8].top || bS[12].top)) {
+                        nonZeroBs = true;
+                    }
+                }
+            } else {
+                bS[0] = {
+                    top: 0
+                };
+                bS[4] = {
+                    top: 0
+                };
+                bS[8] = {
+                    top: 0
+                };
+                bS[12] = {
+                    top: 0
+                };
+            }
+            if (this.type === _defs.I_MB) {
+                bS[4].top = bS[5].top = bS[6].top = bS[7].top =
+                    bS[8].top = bS[9].top = bS[10].top = bS[11].top =
+                        bS[12].top = bS[13].top = bS[14].top = bS[15].top = 3;
+
+                bS[1].left = bS[2].left = bS[3].left =
+                    bS[5].left = bS[6].left = bS[7].left =
+                        bS[9].left = bS[10].left = bS[11].left =
+                            bS[13].left = bS[14].left = bS[15].left = 3;
+                nonZeroBs = true;
+
+            } else {
+                var mb = this;
+                if (this.numMbPart === 1) {
+                    bS[4].top = mb.totalCoeff[2] || mb.totalCoeff[0] ? 2 : 0;
+                    bS[5].top = mb.totalCoeff[3] || mb.totalCoeff[1] ? 2 : 0;
+                    bS[6].top = mb.totalCoeff[6] || mb.totalCoeff[4] ? 2 : 0;
+                    bS[7].top = mb.totalCoeff[7] || mb.totalCoeff[5] ? 2 : 0;
+                    bS[8].top = mb.totalCoeff[8] || mb.totalCoeff[2] ? 2 : 0;
+                    bS[9].top = mb.totalCoeff[9] || mb.totalCoeff[3] ? 2 : 0;
+                    bS[10].top = mb.totalCoeff[12] || mb.totalCoeff[6] ? 2 : 0;
+                    bS[11].top = mb.totalCoeff[13] || mb.totalCoeff[7] ? 2 : 0;
+                    bS[12].top = mb.totalCoeff[10] || mb.totalCoeff[8] ? 2 : 0;
+                    bS[13].top = mb.totalCoeff[11] || mb.totalCoeff[9] ? 2 : 0;
+                    bS[14].top = mb.totalCoeff[14] || mb.totalCoeff[12] ? 2 : 0;
+                    bS[15].top = mb.totalCoeff[15] || mb.totalCoeff[13] ? 2 : 0;
+
+                    bS[1].left = mb.totalCoeff[1] || mb.totalCoeff[0] ? 2 : 0;
+                    bS[2].left = mb.totalCoeff[4] || mb.totalCoeff[1] ? 2 : 0;
+                    bS[3].left = mb.totalCoeff[5] || mb.totalCoeff[4] ? 2 : 0;
+                    bS[5].left = mb.totalCoeff[3] || mb.totalCoeff[2] ? 2 : 0;
+                    bS[6].left = mb.totalCoeff[6] || mb.totalCoeff[3] ? 2 : 0;
+                    bS[7].left = mb.totalCoeff[7] || mb.totalCoeff[6] ? 2 : 0;
+                    bS[9].left = mb.totalCoeff[9] || mb.totalCoeff[8] ? 2 : 0;
+                    bS[10].left = mb.totalCoeff[12] || mb.totalCoeff[9] ? 2 : 0;
+                    bS[11].left = mb.totalCoeff[13] || mb.totalCoeff[12] ? 2 : 0;
+                    bS[13].left = mb.totalCoeff[11] || mb.totalCoeff[10] ? 2 : 0;
+                    bS[14].left = mb.totalCoeff[14] || mb.totalCoeff[11] ? 2 : 0;
+                    bS[15].left = mb.totalCoeff[15] || mb.totalCoeff[14] ? 2 : 0;
+                }
+                /* 16x8 inter mb . ref addresses and motion vectors can be different
+                 * only for the middle horizontal edge, for the other top edges it is
+                 * enough to check whether the blocks contain coefficients or not. The
+                 * same applies to all internal left edges. */
+                else if (mb.mb_type == _defs.P_L0_L0_16x8) {
+                    bS[4].top = mb.totalCoeff[2] || mb.totalCoeff[0] ? 2 : 0;
+                    bS[5].top = mb.totalCoeff[3] || mb.totalCoeff[1] ? 2 : 0;
+                    bS[6].top = mb.totalCoeff[6] || mb.totalCoeff[4] ? 2 : 0;
+                    bS[7].top = mb.totalCoeff[7] || mb.totalCoeff[5] ? 2 : 0;
+                    bS[12].top = mb.totalCoeff[10] || mb.totalCoeff[8] ? 2 : 0;
+                    bS[13].top = mb.totalCoeff[11] || mb.totalCoeff[9] ? 2 : 0;
+                    bS[14].top = mb.totalCoeff[14] || mb.totalCoeff[12] ? 2 : 0;
+                    bS[15].top = mb.totalCoeff[15] || mb.totalCoeff[13] ? 2 : 0;
+                    bS[8].top = InnerBoundaryStrength(mb, 8, 2);
+                    bS[9].top = InnerBoundaryStrength(mb, 9, 3);
+                    bS[10].top = InnerBoundaryStrength(mb, 12, 6);
+                    bS[11].top = InnerBoundaryStrength(mb, 13, 7);
+
+                    bS[1].left = mb.totalCoeff[1] || mb.totalCoeff[0] ? 2 : 0;
+                    bS[2].left = mb.totalCoeff[4] || mb.totalCoeff[1] ? 2 : 0;
+                    bS[3].left = mb.totalCoeff[5] || mb.totalCoeff[4] ? 2 : 0;
+                    bS[5].left = mb.totalCoeff[3] || mb.totalCoeff[2] ? 2 : 0;
+                    bS[6].left = mb.totalCoeff[6] || mb.totalCoeff[3] ? 2 : 0;
+                    bS[7].left = mb.totalCoeff[7] || mb.totalCoeff[6] ? 2 : 0;
+                    bS[9].left = mb.totalCoeff[9] || mb.totalCoeff[8] ? 2 : 0;
+                    bS[10].left = mb.totalCoeff[12] || mb.totalCoeff[9] ? 2 : 0;
+                    bS[11].left = mb.totalCoeff[13] || mb.totalCoeff[12] ? 2 : 0;
+                    bS[13].left = mb.totalCoeff[11] || mb.totalCoeff[10] ? 2 : 0;
+                    bS[14].left = mb.totalCoeff[14] || mb.totalCoeff[11] ? 2 : 0;
+                    bS[15].left = mb.totalCoeff[15] || mb.totalCoeff[14] ? 2 : 0;
+                }
+                /* 8x16 inter mb . ref addresses and motion vectors can be different
+                 * only for the middle vertical edge, for the other left edges it is
+                 * enough to check whether the blocks contain coefficients or not. The
+                 * same applies to all internal top edges. */
+                else if (mb.mb_type == _defs.P_L0_L0_8x16) {
+                    bS[4].top = mb.totalCoeff[2] || mb.totalCoeff[0] ? 2 : 0;
+                    bS[5].top = mb.totalCoeff[3] || mb.totalCoeff[1] ? 2 : 0;
+                    bS[6].top = mb.totalCoeff[6] || mb.totalCoeff[4] ? 2 : 0;
+                    bS[7].top = mb.totalCoeff[7] || mb.totalCoeff[5] ? 2 : 0;
+                    bS[8].top = mb.totalCoeff[8] || mb.totalCoeff[2] ? 2 : 0;
+                    bS[9].top = mb.totalCoeff[9] || mb.totalCoeff[3] ? 2 : 0;
+                    bS[10].top = mb.totalCoeff[12] || mb.totalCoeff[6] ? 2 : 0;
+                    bS[11].top = mb.totalCoeff[13] || mb.totalCoeff[7] ? 2 : 0;
+                    bS[12].top = mb.totalCoeff[10] || mb.totalCoeff[8] ? 2 : 0;
+                    bS[13].top = mb.totalCoeff[11] || mb.totalCoeff[9] ? 2 : 0;
+                    bS[14].top = mb.totalCoeff[14] || mb.totalCoeff[12] ? 2 : 0;
+                    bS[15].top = mb.totalCoeff[15] || mb.totalCoeff[13] ? 2 : 0;
+
+                    bS[1].left = mb.totalCoeff[1] || mb.totalCoeff[0] ? 2 : 0;
+                    bS[3].left = mb.totalCoeff[5] || mb.totalCoeff[4] ? 2 : 0;
+                    bS[5].left = mb.totalCoeff[3] || mb.totalCoeff[2] ? 2 : 0;
+                    bS[7].left = mb.totalCoeff[7] || mb.totalCoeff[6] ? 2 : 0;
+                    bS[9].left = mb.totalCoeff[9] || mb.totalCoeff[8] ? 2 : 0;
+                    bS[11].left = mb.totalCoeff[13] || mb.totalCoeff[12] ? 2 : 0;
+                    bS[13].left = mb.totalCoeff[11] || mb.totalCoeff[10] ? 2 : 0;
+                    bS[15].left = mb.totalCoeff[15] || mb.totalCoeff[14] ? 2 : 0;
+                    bS[2].left = InnerBoundaryStrength(mb, 4, 1);
+                    bS[6].left = InnerBoundaryStrength(mb, 6, 3);
+                    bS[10].left = InnerBoundaryStrength(mb, 12, 9);
+                    bS[14].left = InnerBoundaryStrength(mb, 14, 11);
+                }
+                else {
+                    bS[4].top =
+                        InnerBoundaryStrength(mb, mb4x4Index[4], mb4x4Index[0]);
+                    bS[5].top =
+                        InnerBoundaryStrength(mb, mb4x4Index[5], mb4x4Index[1]);
+                    bS[6].top =
+                        InnerBoundaryStrength(mb, mb4x4Index[6], mb4x4Index[2]);
+                    bS[7].top =
+                        InnerBoundaryStrength(mb, mb4x4Index[7], mb4x4Index[3]);
+                    bS[8].top =
+                        InnerBoundaryStrength(mb, mb4x4Index[8], mb4x4Index[4]);
+                    bS[9].top =
+                        InnerBoundaryStrength(mb, mb4x4Index[9], mb4x4Index[5]);
+                    bS[10].top =
+                        InnerBoundaryStrength(mb, mb4x4Index[10], mb4x4Index[6]);
+                    bS[11].top =
+                        InnerBoundaryStrength(mb, mb4x4Index[11], mb4x4Index[7]);
+                    bS[12].top =
+                        InnerBoundaryStrength(mb, mb4x4Index[12], mb4x4Index[8]);
+                    bS[13].top =
+                        InnerBoundaryStrength(mb, mb4x4Index[13], mb4x4Index[9]);
+                    bS[14].top =
+                        InnerBoundaryStrength(mb, mb4x4Index[14], mb4x4Index[10]);
+                    bS[15].top =
+                        InnerBoundaryStrength(mb, mb4x4Index[15], mb4x4Index[11]);
+
+                    bS[1].left =
+                        InnerBoundaryStrength(mb, mb4x4Index[1], mb4x4Index[0]);
+                    bS[2].left =
+                        InnerBoundaryStrength(mb, mb4x4Index[2], mb4x4Index[1]);
+                    bS[3].left =
+                        InnerBoundaryStrength(mb, mb4x4Index[3], mb4x4Index[2]);
+                    bS[5].left =
+                        InnerBoundaryStrength(mb, mb4x4Index[5], mb4x4Index[4]);
+                    bS[6].left =
+                        InnerBoundaryStrength(mb, mb4x4Index[6], mb4x4Index[5]);
+                    bS[7].left =
+                        InnerBoundaryStrength(mb, mb4x4Index[7], mb4x4Index[6]);
+                    bS[9].left =
+                        InnerBoundaryStrength(mb, mb4x4Index[9], mb4x4Index[8]);
+                    bS[10].left =
+                        InnerBoundaryStrength(mb, mb4x4Index[10], mb4x4Index[9]);
+                    bS[11].left =
+                        InnerBoundaryStrength(mb, mb4x4Index[11], mb4x4Index[10]);
+                    bS[13].left =
+                        InnerBoundaryStrength(mb, mb4x4Index[13], mb4x4Index[12]);
+                    bS[14].left =
+                        InnerBoundaryStrength(mb, mb4x4Index[14], mb4x4Index[13]);
+                    bS[15].left =
+                        InnerBoundaryStrength(mb, mb4x4Index[15], mb4x4Index[14]);
+                }
+                if (!nonZeroBs &&
+                    (bS[4].top || bS[5].top || bS[6].top || bS[7].top ||
+                    bS[8].top || bS[9].top || bS[10].top || bS[11].top ||
+                    bS[12].top || bS[13].top || bS[14].top || bS[15].top ||
+                    bS[1].left || bS[2].left || bS[3].left ||
+                    bS[5].left || bS[6].left || bS[7].left ||
+                    bS[9].left || bS[10].left || bS[11].left ||
+                    bS[13].left || bS[14].left || bS[15].left))
+                    nonZeroBs = true;
+            }
+            return nonZeroBs;
+        },
+        getLumaEdgeThresholds: function(thresholds, filteringFlags) {
+
+            /* Variables */
+
+            var
+                indexA, indexB,
+                qpAv, qp, qpTmp;
+            var alphas = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 5, 6, 7, 8, 9, 10,
+                12, 13, 15, 17, 20, 22, 25, 28, 32, 36, 40, 45, 50, 56, 63, 71, 80, 90, 101, 113, 127, 144, 162,
+                182, 203, 226, 255, 255];
+
+            /* array of beta values, from the standard */
+            var betas = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 3, 3, 3, 3, 4, 4,
+                4, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15, 16, 16, 17, 17, 18, 18];
+
+            var tc0 = [
+                [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0],
+                [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0],
+                [0, 0, 0], [0, 0, 1], [0, 0, 1], [0, 0, 1], [0, 0, 1], [0, 1, 1], [0, 1, 1], [1, 1, 1],
+                [1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 2], [1, 1, 2], [1, 1, 2], [1, 1, 2], [1, 2, 3],
+                [1, 2, 3], [2, 2, 3], [2, 2, 4], [2, 3, 4], [2, 3, 4], [3, 3, 5], [3, 4, 6], [3, 4, 6],
+                [4, 5, 7], [4, 5, 8], [4, 6, 9], [5, 7, 10], [6, 8, 11], [6, 8, 13], [7, 10, 14], [8, 11, 16],
+                [9, 12, 18], [10, 13, 20], [11, 15, 23], [13, 17, 25]
+            ];
+            qp = this.qpY;
+
+            indexA = _common.clip3(0, 51, qp + this.slice.slice_alpha_c0_offset_div2 << 1);
+            indexB = _common.clip3(0, 51, qp + this.slice.slice_beta_offset_div2 << 1);
+
+            thresholds[2].alpha = alphas[indexA];
+            thresholds[2].beta = betas[indexB];
+            thresholds[2].tc0 = tc0[indexA];
+
+            if (filteringFlags.filter_top_edge) {
+                qpTmp = this.mbB.qpY;
+                if (qpTmp != qp) {
+                    qpAv = (qp + qpTmp + 1) >> 1;
+
+                    indexA = _common.clip3(0, 51, qpAv + this.slice.slice_alpha_c0_offset_div2 << 1);
+                    indexB = _common.clip3(0, 51, qpAv + this.slice.slice_beta_offset_div2 << 1);
+
+
+                    thresholds[0].alpha = alphas[indexA];
+                    thresholds[0].beta = betas[indexB];
+                    thresholds[0].tc0 = tc0[indexA];
+                }
+                else {
+                    thresholds[0].alpha = thresholds[2].alpha;
+                    thresholds[0].beta = thresholds[2].beta;
+                    thresholds[0].tc0 = thresholds[2].tc0;
+                }
+            }
+            if (filteringFlags.filter_left_edge) {
+                qpTmp = this.mbA.qpY;
+                if (qpTmp != qp) {
+                    qpAv = (qp + qpTmp + 1) >> 1;
+
+                    indexA = _common.clip3(0, 51, qpAv + this.slice.slice_alpha_c0_offset_div2 << 1);
+                    indexB = _common.clip3(0, 51, qpAv + this.slice.slice_beta_offset_div2 << 1);
+
+                    thresholds[1].alpha = alphas[indexA];
+                    thresholds[1].beta = betas[indexB];
+                    thresholds[1].tc0 = tc0[indexA];
+                }
+                else {
+                    thresholds[1].alpha = thresholds[2].alpha;
+                    thresholds[1].beta = thresholds[2].beta;
+                    thresholds[1].tc0 = thresholds[2].tc0;
+                }
+            }
+
+        },
+        filterLuma: function(data, bS, thresholds, width) {
+            var tmp = bS;
+            var ptr = data;
+            var offset = 0;
+            for (var vblock = 4; vblock--;) {
+                /* only perform filtering if bS is non-zero, first of the four
+                 * FilterVerLumaEdge handles the left edge of the macroblock, others
+                 * filter inner edges */
+                if (tmp[0].left)
+                    FilterVerLumaEdge(ptr, tmp[0].left, thresholds + 1, width);
+                if (tmp[1].left)
+                    FilterVerLumaEdge(ptr + 4, tmp[1].left, thresholds + 2, width);
+                if (tmp[2].left)
+                    FilterVerLumaEdge(ptr + 8, tmp[2].left, thresholds + 2, width);
+                if (tmp[3].left)
+                    FilterVerLumaEdge(ptr + 12, tmp[3].left, thresholds + 2, width);
+
+                /* if bS is equal for all horizontal edges of the row . perform
+                 * filtering with FilterHorLuma, otherwise use FilterHorLumaEdge for
+                 * each edge separately. offset variable indicates top macroblock edge
+                 * on the first loop round, inner edge for the other rounds */
+                if (tmp[0].top == tmp[1].top && tmp[1].top == tmp[2].top &&
+                    tmp[2].top == tmp[3].top) {
+                    if (tmp[0].top)
+                        FilterHorLuma(ptr, tmp[0].top, thresholds + offset, width);
+                }
+                else {
+                    if (tmp[0].top)
+                        FilterHorLumaEdge(ptr, tmp[0].top, thresholds + offset,
+                            width);
+                    if (tmp[1].top)
+                        FilterHorLumaEdge(ptr + 4, tmp[1].top, thresholds + offset,
+                            width);
+                    if (tmp[2].top)
+                        FilterHorLumaEdge(ptr + 8, tmp[2].top, thresholds + offset,
+                            width);
+                    if (tmp[3].top)
+                        FilterHorLumaEdge(ptr + 12, tmp[3].top, thresholds + offset,
+                            width);
+                }
+
+                /* four pixel rows ahead, i.e. next row of 4x4-blocks */
+                ptr += width * 4;
+                tmp += 4;
+                offset = 2;
+            }
         }
     };
+
+    var h264Clip =
+        [
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+            16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+            32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
+            48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63,
+            64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
+            80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95,
+            96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111,
+            112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127,
+            128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143,
+            144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159,
+            160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175,
+            176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191,
+            192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207,
+            208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223,
+            224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239,
+            240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255
+        ];
+
+    function FilterVerLumaEdge(data, bS, thresholds, imageWidth) {
+
+        /* Variables */
+
+        var delta, tc, tmp;
+        var i;
+        var p0, q0, p1, q1, p2, q2;
+        var tmpFlag;
+        var clp = h264Clip[512];
+
+
+        if (bS < 4) {
+            tc = thresholds.tc0[bS - 1];
+            tmp = tc;
+            for (i = 4; i; i--, data += imageWidth) {
+                p1 = data[-2];
+                p0 = data[-1];
+                q0 = data[0];
+                q1 = data[1];
+                if ((Math.abs(p0 - q0) < thresholds.alpha) &&
+                    (Math.abs(p1 - p0) < thresholds.beta) &&
+                    (Math.abs(q1 - q0) < thresholds.beta)) {
+                    p2 = data[-3];
+                    q2 = data[2];
+
+                    if (Math.abs(p2 - p0) < thresholds.beta) {
+                        data[-2] = (p1 + _common.clip3(-tc, tc,
+                            (p2 + ((p0 + q0 + 1) >> 1) - (p1 << 1)) >> 1));
+                        tmp++;
+                    }
+
+                    if (Math.abs(q2 - q0) < thresholds.beta) {
+                        data[1] = (q1 + _common.clip3(-tc, tc,
+                            (q2 + ((p0 + q0 + 1) >> 1) - (q1 << 1)) >> 1));
+                        tmp++;
+                    }
+
+                    delta = _common.clip3(-tmp, tmp, ((((q0 - p0) << 2) +
+                    (p1 - q1) + 4) >> 3));
+
+                    p0 = clp[p0 + delta];
+                    q0 = clp[q0 - delta];
+                    tmp = tc;
+                    data[-1] = p0;
+                    data[0] = q0;
+                }
+            }
+        }
+        else {
+            for (i = 4; i; i--, data += imageWidth) {
+                p1 = data[-2];
+                p0 = data[-1];
+                q0 = data[0];
+                q1 = data[1];
+                if ((Math.abs(p0 - q0) < thresholds.alpha) &&
+                    (Math.abs(p1 - p0) < thresholds.beta) &&
+                    (Math.abs(q1 - q0) < thresholds.beta)) {
+                    tmpFlag =
+                        (Math.abs(p0 - q0) < ((thresholds.alpha >> 2) + 2)) ?
+                            true : false;
+
+                    p2 = data[-3];
+                    q2 = data[2];
+
+                    if (tmpFlag && Math.abs(p2 - p0) < thresholds.beta) {
+                        tmp = p1 + p0 + q0;
+                        data[-1] = ((p2 + 2 * tmp + q1 + 4) >> 3);
+                        data[-2] = ((p2 + tmp + 2) >> 2);
+                        data[-3] = ((2 * data[-4] + 3 * p2 + tmp + 4) >> 3);
+                    }
+                    else
+                        data[-1] = (2 * p1 + p0 + q1 + 2) >> 2;
+
+                    if (tmpFlag && Math.abs(q2 - q0) < thresholds.beta) {
+                        tmp = p0 + q0 + q1;
+                        data[0] = ((p1 + 2 * tmp + q2 + 4) >> 3);
+                        data[1] = ((tmp + q2 + 2) >> 2);
+                        data[2] = ((2 * data[3] + 3 * q2 + tmp + 4) >> 3);
+                    }
+                    else
+                        data[0] = ((2 * q1 + q0 + p1 + 2) >> 2);
+                }
+            }
+        }
+
+    }
+
+    function FilterHorLuma(data, bS, thresholds, imageWidth) {
+
+        /* Variables */
+
+        var delta, tc, tmp;
+        var i;
+        var p0, q0, p1, q1, p2, q2;
+        var tmpFlag;
+        var clp = h264Clip[512];
+
+
+        if (bS < 4) {
+            tc = thresholds.tc0[bS - 1];
+            tmp = tc;
+            for (i = 16; i; i--, data++) {
+                p1 = data[-imageWidth * 2];
+                p0 = data[-imageWidth];
+                q0 = data[0];
+                q1 = data[imageWidth];
+                if ((Math.abs(p0 - q0) < thresholds.alpha) &&
+                    (Math.abs(p1 - p0) < thresholds.beta) &&
+                    (Math.abs(q1 - q0) < thresholds.beta)) {
+                    p2 = data[-imageWidth * 3];
+
+                    if (Math.abs(p2 - p0) < thresholds.beta) {
+                        data[-imageWidth * 2] = (p1 + _common.clip3(-tc, tc,
+                            (p2 + ((p0 + q0 + 1) >> 1) - (p1 << 1)) >> 1));
+                        tmp++;
+                    }
+
+                    q2 = data[imageWidth * 2];
+
+                    if (Math.abs(q2 - q0) < thresholds.beta) {
+                        data[imageWidth] = (q1 + _common.clip3(-tc, tc,
+                            (q2 + ((p0 + q0 + 1) >> 1) - (q1 << 1)) >> 1));
+                        tmp++;
+                    }
+
+                    delta = _common.clip3(-tmp, tmp, ((((q0 - p0) << 2) +
+                    (p1 - q1) + 4) >> 3));
+
+                    p0 = clp[p0 + delta];
+                    q0 = clp[q0 - delta];
+                    tmp = tc;
+                    data[-imageWidth] = p0;
+                    data[0] = q0;
+                }
+            }
+        }
+        else {
+            for (i = 16; i; i--, data++) {
+                p1 = data[-imageWidth * 2];
+                p0 = data[-imageWidth];
+                q0 = data[0];
+                q1 = data[imageWidth];
+                if ((Math.abs(p0 - q0) < thresholds.alpha) &&
+                    (Math.abs(p1 - p0) < thresholds.beta) &&
+                    (Math.abs(q1 - q0) < thresholds.beta)) {
+                    tmpFlag = (Math.abs(p0 - q0) < ((thresholds.alpha >> 2) + 2)) ? true : false;
+
+                    p2 = data[-imageWidth * 3];
+                    q2 = data[imageWidth * 2];
+
+                    if (tmpFlag && Math.abs(p2 - p0) < thresholds.beta) {
+                        tmp = p1 + p0 + q0;
+                        data[-imageWidth] = ((p2 + 2 * tmp + q1 + 4) >> 3);
+                        data[-imageWidth * 2] = ((p2 + tmp + 2) >> 2);
+                        data[-imageWidth * 3] = ((2 * data[-imageWidth * 4] +
+                        3 * p2 + tmp + 4) >> 3);
+                    }
+                    else
+                        data[-imageWidth] = ((2 * p1 + p0 + q1 + 2) >> 2);
+
+                    if (tmpFlag && Math.abs(q2 - q0) < thresholds.beta) {
+                        tmp = p0 + q0 + q1;
+                        data[0] = ((p1 + 2 * tmp + q2 + 4) >> 3);
+                        data[imageWidth] = ((tmp + q2 + 2) >> 2);
+                        data[imageWidth * 2] = ((2 * data[imageWidth * 3] +
+                        3 * q2 + tmp + 4) >> 3);
+                    }
+                    else
+                        data[0] = (2 * q1 + q0 + p1 + 2) >> 2;
+                }
+            }
+        }
+
+    }
+
+    function FilterHorLumaEdge(data, bS, thresholds, imageWidth) {
+
+        /* Variables */
+
+        var delta, tc, tmp;
+        var i;
+        var p0, q0, p1, q1, p2, q2;
+        var clp = h264Clip[512];
+
+
+        tc = thresholds.tc0[bS - 1];
+        tmp = tc;
+        for (i = 4; i; i--, data++) {
+            p1 = data[-imageWidth * 2];
+            p0 = data[-imageWidth];
+            q0 = data[0];
+            q1 = data[imageWidth];
+            if ((Math.abs(p0 - q0) < thresholds.alpha) &&
+                (Math.abs(p1 - p0) < thresholds.beta) &&
+                (Math.abs(q1 - q0) < thresholds.beta)) {
+                p2 = data[-imageWidth * 3];
+
+                if (Math.abs(p2 - p0) < thresholds.beta) {
+                    data[-imageWidth * 2] = (p1 + _common.clip3(-tc, tc,
+                        (p2 + ((p0 + q0 + 1) >> 1) - (p1 << 1)) >> 1));
+                    tmp++;
+                }
+
+                q2 = data[imageWidth * 2];
+
+                if (Math.abs(q2 - q0) < thresholds.beta) {
+                    data[imageWidth] = (q1 + _common.clip3(-tc, tc,
+                        (q2 + ((p0 + q0 + 1) >> 1) - (q1 << 1)) >> 1));
+                    tmp++;
+                }
+
+                delta = _common.clip3(-tmp, tmp, ((((q0 - p0) << 2) +
+                (p1 - q1) + 4) >> 3));
+
+                p0 = clp[p0 + delta];
+                q0 = clp[q0 - delta];
+                tmp = tc;
+                data[-imageWidth] = p0;
+                data[0] = q0;
+            }
+        }
+    }
 
     function create(opts) {
         var ml = new Macroblock_layer();

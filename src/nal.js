@@ -5,10 +5,8 @@ define([
     'de264/queuebuffer',
 ], function(_queuebuffer) {
 
-    function Nal(buf, decoder) {
-        this.buf = buf;
-        this.dv = new DataView(buf);
-        this.decoder = decoder;
+    function Nal() {
+        this.dv = new DataView(this.buf);
     }
 
     Nal.prototype = {
@@ -36,26 +34,12 @@ define([
         },
     };
 
-    function create(buf, decoder) {
-        var nal = new Nal(buf, decoder);
+    function create(opts) {
+        var nal = new Nal();
+        for (var i in opts) {
+            nal[i] = opts[i];
+        }
         return nal;
-    }
-
-    /**
-     * extract one nalu from ringbuffer
-     * @Ringbuffer buf
-     */
-    function extract(rbuf) {
-        // while (rbuf.deqUint16() === 0x0000 && rbuf)
-        // /* remove data before 0x000000 or 0x000001 */
-        // var buf = new ArrayBuffer(4);
-        // while (rbuf.deq(buf, 4, true)) {
-        //
-        // }
-        // /* byte stream format if starts with 0x000001 or 0x000000 */
-        // if (buf.byteLength >= 4 && arr[0] === 0x00 && arr[1] === 0x00 && arr[2]&0xFE === 0x00) {
-        //
-        // }
     }
 
     return {
