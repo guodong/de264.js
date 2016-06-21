@@ -2281,7 +2281,7 @@ define([
             }
 
         },
-        filterLuma: function(data, bS, thresholds, width) {
+        filterLuma: function(data, index, bS, thresholds, width) {
             var tmp = bS;
             var ptr = data;
             var offset = 0;
@@ -2290,13 +2290,13 @@ define([
                  * FilterVerLumaEdge handles the left edge of the macroblock, others
                  * filter inner edges */
                 if (tmp[0].left)
-                    FilterVerLumaEdge(ptr, tmp[0].left, thresholds + 1, width);
+                    FilterVerLumaEdge(ptr, index, tmp[0].left, thresholds[1], width);
                 if (tmp[1].left)
-                    FilterVerLumaEdge(ptr + 4, tmp[1].left, thresholds + 2, width);
+                    FilterVerLumaEdge(ptr, index+4, tmp[1].left, thresholds[2], width);
                 if (tmp[2].left)
-                    FilterVerLumaEdge(ptr + 8, tmp[2].left, thresholds + 2, width);
+                    FilterVerLumaEdge(ptr, index+8, tmp[2].left, thresholds[2], width);
                 if (tmp[3].left)
-                    FilterVerLumaEdge(ptr + 12, tmp[3].left, thresholds + 2, width);
+                    FilterVerLumaEdge(ptr, index+12, tmp[3].left, thresholds[2], width);
 
                 /* if bS is equal for all horizontal edges of the row . perform
                  * filtering with FilterHorLuma, otherwise use FilterHorLumaEdge for
@@ -2305,32 +2305,32 @@ define([
                 if (tmp[0].top == tmp[1].top && tmp[1].top == tmp[2].top &&
                     tmp[2].top == tmp[3].top) {
                     if (tmp[0].top)
-                        FilterHorLuma(ptr, tmp[0].top, thresholds + offset, width);
+                        FilterHorLuma(ptr, tmp[0].top, thresholds[offset], width);
                 }
                 else {
                     if (tmp[0].top)
-                        FilterHorLumaEdge(ptr, tmp[0].top, thresholds + offset,
+                        FilterHorLumaEdge(ptr, index, tmp[0].top, thresholds[offset],
                             width);
                     if (tmp[1].top)
-                        FilterHorLumaEdge(ptr + 4, tmp[1].top, thresholds + offset,
+                        FilterHorLumaEdge(ptr, index+4, tmp[1].top, thresholds[offset],
                             width);
                     if (tmp[2].top)
-                        FilterHorLumaEdge(ptr + 8, tmp[2].top, thresholds + offset,
+                        FilterHorLumaEdge(ptr, index+8, tmp[2].top, thresholds[offset],
                             width);
                     if (tmp[3].top)
-                        FilterHorLumaEdge(ptr + 12, tmp[3].top, thresholds + offset,
+                        FilterHorLumaEdge(ptr, index+12, tmp[3].top, thresholds[offset],
                             width);
                 }
 
                 /* four pixel rows ahead, i.e. next row of 4x4-blocks */
-                ptr += width * 4;
-                tmp += 4;
+                index += width*4;
+                tmp = tmp.slice(4);
                 offset = 2;
             }
         }
     };
 
-    var h264Clip =
+    var h264Cliparr =
         [
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -2397,8 +2397,8 @@ define([
             255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
             255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255
         ];
-
-    function FilterVerLumaEdge(data, bS, thresholds, imageWidth) {
+    var h264Clip = h264Cliparr.slice(512);
+    function FilterVerLumaEdge(data, index, bS, thresholds, imageWidth) {
 
         /* Variables */
 
@@ -2406,31 +2406,31 @@ define([
         var i;
         var p0, q0, p1, q1, p2, q2;
         var tmpFlag;
-        var clp = h264Clip[512];
+        var clp = h264Clip;
 
 
         if (bS < 4) {
             tc = thresholds.tc0[bS - 1];
             tmp = tc;
-            for (i = 4; i; i--, data += imageWidth) {
-                p1 = data[-2];
-                p0 = data[-1];
-                q0 = data[0];
-                q1 = data[1];
+            for (i = 4; i; i--, index += imageWidth) {
+                p1 = data[index-2];
+                p0 = data[index-1];
+                q0 = data[index];
+                q1 = data[index+1];
                 if ((Math.abs(p0 - q0) < thresholds.alpha) &&
                     (Math.abs(p1 - p0) < thresholds.beta) &&
                     (Math.abs(q1 - q0) < thresholds.beta)) {
-                    p2 = data[-3];
-                    q2 = data[2];
+                    p2 = data[index-3];
+                    q2 = data[index+2];
 
                     if (Math.abs(p2 - p0) < thresholds.beta) {
-                        data[-2] = (p1 + _common.clip3(-tc, tc,
+                        data[index-2] = (p1 + _common.clip3(-tc, tc,
                             (p2 + ((p0 + q0 + 1) >> 1) - (p1 << 1)) >> 1));
                         tmp++;
                     }
 
                     if (Math.abs(q2 - q0) < thresholds.beta) {
-                        data[1] = (q1 + _common.clip3(-tc, tc,
+                        data[index+1] = (q1 + _common.clip3(-tc, tc,
                             (q2 + ((p0 + q0 + 1) >> 1) - (q1 << 1)) >> 1));
                         tmp++;
                     }
@@ -2441,170 +2441,168 @@ define([
                     p0 = clp[p0 + delta];
                     q0 = clp[q0 - delta];
                     tmp = tc;
-                    data[-1] = p0;
-                    data[0] = q0;
+                    data[index-1] = p0;
+                    data[index] = q0;
                 }
             }
         }
         else {
-            for (i = 4; i; i--, data += imageWidth) {
-                p1 = data[-2];
-                p0 = data[-1];
-                q0 = data[0];
-                q1 = data[1];
-                if ((Math.abs(p0 - q0) < thresholds.alpha) &&
-                    (Math.abs(p1 - p0) < thresholds.beta) &&
-                    (Math.abs(q1 - q0) < thresholds.beta)) {
-                    tmpFlag =
-                        (Math.abs(p0 - q0) < ((thresholds.alpha >> 2) + 2)) ?
-                            true : false;
-
-                    p2 = data[-3];
-                    q2 = data[2];
-
-                    if (tmpFlag && Math.abs(p2 - p0) < thresholds.beta) {
-                        tmp = p1 + p0 + q0;
-                        data[-1] = ((p2 + 2 * tmp + q1 + 4) >> 3);
-                        data[-2] = ((p2 + tmp + 2) >> 2);
-                        data[-3] = ((2 * data[-4] + 3 * p2 + tmp + 4) >> 3);
-                    }
-                    else
-                        data[-1] = (2 * p1 + p0 + q1 + 2) >> 2;
-
-                    if (tmpFlag && Math.abs(q2 - q0) < thresholds.beta) {
-                        tmp = p0 + q0 + q1;
-                        data[0] = ((p1 + 2 * tmp + q2 + 4) >> 3);
-                        data[1] = ((tmp + q2 + 2) >> 2);
-                        data[2] = ((2 * data[3] + 3 * q2 + tmp + 4) >> 3);
-                    }
-                    else
-                        data[0] = ((2 * q1 + q0 + p1 + 2) >> 2);
-                }
-            }
-        }
-
-    }
-
-    function FilterHorLuma(data, bS, thresholds, imageWidth) {
-
-        /* Variables */
-
-        var delta, tc, tmp;
-        var i;
-        var p0, q0, p1, q1, p2, q2;
-        var tmpFlag;
-        var clp = h264Clip[512];
-
-
-        if (bS < 4) {
-            tc = thresholds.tc0[bS - 1];
-            tmp = tc;
-            for (i = 16; i; i--, data++) {
-                p1 = data[-imageWidth * 2];
-                p0 = data[-imageWidth];
-                q0 = data[0];
-                q1 = data[imageWidth];
-                if ((Math.abs(p0 - q0) < thresholds.alpha) &&
-                    (Math.abs(p1 - p0) < thresholds.beta) &&
-                    (Math.abs(q1 - q0) < thresholds.beta)) {
-                    p2 = data[-imageWidth * 3];
-
-                    if (Math.abs(p2 - p0) < thresholds.beta) {
-                        data[-imageWidth * 2] = (p1 + _common.clip3(-tc, tc,
-                            (p2 + ((p0 + q0 + 1) >> 1) - (p1 << 1)) >> 1));
-                        tmp++;
-                    }
-
-                    q2 = data[imageWidth * 2];
-
-                    if (Math.abs(q2 - q0) < thresholds.beta) {
-                        data[imageWidth] = (q1 + _common.clip3(-tc, tc,
-                            (q2 + ((p0 + q0 + 1) >> 1) - (q1 << 1)) >> 1));
-                        tmp++;
-                    }
-
-                    delta = _common.clip3(-tmp, tmp, ((((q0 - p0) << 2) +
-                    (p1 - q1) + 4) >> 3));
-
-                    p0 = clp[p0 + delta];
-                    q0 = clp[q0 - delta];
-                    tmp = tc;
-                    data[-imageWidth] = p0;
-                    data[0] = q0;
-                }
-            }
-        }
-        else {
-            for (i = 16; i; i--, data++) {
-                p1 = data[-imageWidth * 2];
-                p0 = data[-imageWidth];
-                q0 = data[0];
-                q1 = data[imageWidth];
+            for (i = 4; i; i--, index += imageWidth) {
+                p1 = data[index-2];
+                p0 = data[index-1];
+                q0 = data[index];
+                q1 = data[index+1];
                 if ((Math.abs(p0 - q0) < thresholds.alpha) &&
                     (Math.abs(p1 - p0) < thresholds.beta) &&
                     (Math.abs(q1 - q0) < thresholds.beta)) {
                     tmpFlag = (Math.abs(p0 - q0) < ((thresholds.alpha >> 2) + 2)) ? true : false;
 
-                    p2 = data[-imageWidth * 3];
-                    q2 = data[imageWidth * 2];
+                    p2 = data[index-3];
+                    q2 = data[index+2];
 
                     if (tmpFlag && Math.abs(p2 - p0) < thresholds.beta) {
                         tmp = p1 + p0 + q0;
-                        data[-imageWidth] = ((p2 + 2 * tmp + q1 + 4) >> 3);
-                        data[-imageWidth * 2] = ((p2 + tmp + 2) >> 2);
-                        data[-imageWidth * 3] = ((2 * data[-imageWidth * 4] +
-                        3 * p2 + tmp + 4) >> 3);
+                        data[index-1] = ((p2 + 2 * tmp + q1 + 4) >> 3);
+                        data[index-2] = ((p2 + tmp + 2) >> 2);
+                        data[index-3] = ((2 * data[index-4] + 3 * p2 + tmp + 4) >> 3);
                     }
                     else
-                        data[-imageWidth] = ((2 * p1 + p0 + q1 + 2) >> 2);
+                        data[index-1] = (2 * p1 + p0 + q1 + 2) >> 2;
 
                     if (tmpFlag && Math.abs(q2 - q0) < thresholds.beta) {
                         tmp = p0 + q0 + q1;
-                        data[0] = ((p1 + 2 * tmp + q2 + 4) >> 3);
-                        data[imageWidth] = ((tmp + q2 + 2) >> 2);
-                        data[imageWidth * 2] = ((2 * data[imageWidth * 3] +
-                        3 * q2 + tmp + 4) >> 3);
+                        data[index] = ((p1 + 2 * tmp + q2 + 4) >> 3);
+                        data[index+1] = ((tmp + q2 + 2) >> 2);
+                        data[index+2] = ((2 * data[index+3] + 3 * q2 + tmp + 4) >> 3);
                     }
                     else
-                        data[0] = (2 * q1 + q0 + p1 + 2) >> 2;
+                        data[index] = ((2 * q1 + q0 + p1 + 2) >> 2);
                 }
             }
         }
 
     }
 
-    function FilterHorLumaEdge(data, bS, thresholds, imageWidth) {
+    function FilterHorLuma(data, index, bS, thresholds, imageWidth) {
 
         /* Variables */
 
         var delta, tc, tmp;
         var i;
         var p0, q0, p1, q1, p2, q2;
-        var clp = h264Clip[512];
+        var tmpFlag;
+        var clp = h264Clip;
+
+
+        if (bS < 4) {
+            tc = thresholds.tc0[bS - 1];
+            tmp = tc;
+            for (i = 16; i; i--, index++) {
+                p1 = data[index-imageWidth * 2];
+                p0 = data[index-imageWidth];
+                q0 = data[index];
+                q1 = data[index+imageWidth];
+                if ((Math.abs(p0 - q0) < thresholds.alpha) &&
+                    (Math.abs(p1 - p0) < thresholds.beta) &&
+                    (Math.abs(q1 - q0) < thresholds.beta)) {
+                    p2 = data[index-imageWidth * 3];
+
+                    if (Math.abs(p2 - p0) < thresholds.beta) {
+                        data[index-imageWidth * 2] = (p1 + _common.clip3(-tc, tc,
+                            (p2 + ((p0 + q0 + 1) >> 1) - (p1 << 1)) >> 1));
+                        tmp++;
+                    }
+
+                    q2 = data[index+imageWidth * 2];
+
+                    if (Math.abs(q2 - q0) < thresholds.beta) {
+                        data[index+imageWidth] = (q1 + _common.clip3(-tc, tc,
+                            (q2 + ((p0 + q0 + 1) >> 1) - (q1 << 1)) >> 1));
+                        tmp++;
+                    }
+
+                    delta = _common.clip3(-tmp, tmp, ((((q0 - p0) << 2) +
+                    (p1 - q1) + 4) >> 3));
+
+                    p0 = clp[p0 + delta];
+                    q0 = clp[q0 - delta];
+                    tmp = tc;
+                    data[index-imageWidth] = p0;
+                    data[index] = q0;
+                }
+            }
+        }
+        else {
+            for (i = 16; i; i--, index++) {
+                p1 = data[index-imageWidth * 2];
+                p0 = data[index-imageWidth];
+                q0 = data[index];
+                q1 = data[index+imageWidth];
+                if ((Math.abs(p0 - q0) < thresholds.alpha) &&
+                    (Math.abs(p1 - p0) < thresholds.beta) &&
+                    (Math.abs(q1 - q0) < thresholds.beta)) {
+                    tmpFlag = (Math.abs(p0 - q0) < ((thresholds.alpha >> 2) + 2)) ? true : false;
+
+                    p2 = data[index-imageWidth * 3];
+                    q2 = data[index+imageWidth * 2];
+
+                    if (tmpFlag && Math.abs(p2 - p0) < thresholds.beta) {
+                        tmp = p1 + p0 + q0;
+                        data[index-imageWidth] = ((p2 + 2 * tmp + q1 + 4) >> 3);
+                        data[index-imageWidth * 2] = ((p2 + tmp + 2) >> 2);
+                        data[index-imageWidth * 3] = ((2 * data[index-imageWidth * 4] +
+                        3 * p2 + tmp + 4) >> 3);
+                    }
+                    else
+                        data[index-imageWidth] = ((2 * p1 + p0 + q1 + 2) >> 2);
+
+                    if (tmpFlag && Math.abs(q2 - q0) < thresholds.beta) {
+                        tmp = p0 + q0 + q1;
+                        data[index] = ((p1 + 2 * tmp + q2 + 4) >> 3);
+                        data[index+imageWidth] = ((tmp + q2 + 2) >> 2);
+                        data[index+imageWidth * 2] = ((2 * data[index+imageWidth * 3] +
+                        3 * q2 + tmp + 4) >> 3);
+                    }
+                    else
+                        data[index] = (2 * q1 + q0 + p1 + 2) >> 2;
+                }
+            }
+        }
+
+    }
+
+    function FilterHorLumaEdge(data, index, bS, thresholds, imageWidth) {
+
+        /* Variables */
+
+        var delta, tc, tmp;
+        var i;
+        var p0, q0, p1, q1, p2, q2;
+        var clp = h264Clip;
 
 
         tc = thresholds.tc0[bS - 1];
         tmp = tc;
-        for (i = 4; i; i--, data++) {
-            p1 = data[-imageWidth * 2];
-            p0 = data[-imageWidth];
-            q0 = data[0];
-            q1 = data[imageWidth];
+        for (i = 4; i; i--, index++) {
+            p1 = data[index-imageWidth * 2];
+            p0 = data[index-imageWidth];
+            q0 = data[index];
+            q1 = data[index+imageWidth];
             if ((Math.abs(p0 - q0) < thresholds.alpha) &&
                 (Math.abs(p1 - p0) < thresholds.beta) &&
                 (Math.abs(q1 - q0) < thresholds.beta)) {
-                p2 = data[-imageWidth * 3];
+                p2 = data[index-imageWidth * 3];
 
                 if (Math.abs(p2 - p0) < thresholds.beta) {
-                    data[-imageWidth * 2] = (p1 + _common.clip3(-tc, tc,
+                    data[index-imageWidth * 2] = (p1 + _common.clip3(-tc, tc,
                         (p2 + ((p0 + q0 + 1) >> 1) - (p1 << 1)) >> 1));
                     tmp++;
                 }
 
-                q2 = data[imageWidth * 2];
+                q2 = data[index+imageWidth * 2];
 
                 if (Math.abs(q2 - q0) < thresholds.beta) {
-                    data[imageWidth] = (q1 + _common.clip3(-tc, tc,
+                    data[index+imageWidth] = (q1 + _common.clip3(-tc, tc,
                         (q2 + ((p0 + q0 + 1) >> 1) - (q1 << 1)) >> 1));
                     tmp++;
                 }
@@ -2615,8 +2613,8 @@ define([
                 p0 = clp[p0 + delta];
                 q0 = clp[q0 - delta];
                 tmp = tc;
-                data[-imageWidth] = p0;
-                data[0] = q0;
+                data[index-imageWidth] = p0;
+                data[index] = q0;
             }
         }
     }

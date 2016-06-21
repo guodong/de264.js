@@ -6,10 +6,12 @@ define([
 ], function(_queuebuffer) {
 
     function Nal() {
-        this.dv = new DataView(this.buf);
     }
 
     Nal.prototype = {
+        init: function() {
+            this.dv = new DataView(this.buf);
+        },
         parse: function() {
             var qb = _queuebuffer.create(this.buf);
             this.forbidden_zero_bit = qb.deqBits(1);
@@ -39,6 +41,7 @@ define([
         for (var i in opts) {
             nal[i] = opts[i];
         }
+        nal.init();
         return nal;
     }
 

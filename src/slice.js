@@ -58,6 +58,217 @@ define([
     document.body.appendChild(can);
 
     Slice.prototype = {
+        decodePOC: function(poc) {
+            var picOrderCnt;
+            var containsMmco5 = false;
+            var frameNumOffset;
+            var maxPicOrderCntLsb = 1 << (this.decoder.sps.log2_max_pic_order_cnt_lsb_minus4 + 4);
+            if (this.adaptive_ref_pic_marking_mode_flag)
+            {
+                var i = 0;
+                while (this.operation[i].memory_management_control_operation)
+                {
+                    if (this.operation[i].memory_management_control_operation === 5)
+                    {
+                        containsMmco5 = true;
+                        break;
+                    }
+                    i++;
+                }
+            }
+            switch (this.decoder.sps.pic_order_cnt_type)
+            {
+
+                case 0:
+                    /* set prevPicOrderCnt values for IDR frame */
+                    if (this.nal.nal_unit_type === _defs.NAL_SLICE_IDR)
+                    {
+                        poc.prevPicOrderCntMsb = 0;
+                        poc.prevPicOrderCntLsb = 0;
+                    }
+
+                    /* compute picOrderCntMsb (stored in picOrderCnt variable) */
+                    if ( (this.pic_order_cnt_lsb < poc.prevPicOrderCntLsb) &&
+                        ((poc.prevPicOrderCntLsb - this.pic_order_cnt_lsb) >=
+                        maxPicOrderCntLsb/2) )
+                    {
+                        picOrderCnt = poc.prevPicOrderCntMsb + maxPicOrderCntLsb;
+                    }
+                    else if ((this.pic_order_cnt_lsb > poc.prevPicOrderCntLsb) &&
+                        ((this.pic_order_cnt_lsb - poc.prevPicOrderCntLsb) >
+                        maxPicOrderCntLsb/2) )
+                    {
+                        picOrderCnt = poc.prevPicOrderCntMsb -
+                            maxPicOrderCntLsb;
+                    }
+                    else
+                        picOrderCnt = poc.prevPicOrderCntMsb;
+
+                    /* standard specifies that prevPicOrderCntMsb is from previous
+                     * rererence frame . replace old value only if current frame is
+                     * rererence frame */
+                    if (this.nal.nal_ref_idc)
+                        poc.prevPicOrderCntMsb = picOrderCnt;
+
+                    /* compute top field order cnt (stored in picOrderCnt) */
+                    picOrderCnt += this.pic_order_cnt_lsb;
+
+                    /* if delta for bottom field is negative . bottom will be the
+                     * minimum pic order count */
+                    if (this.delta_pic_order_cnt_bottom < 0)
+                        picOrderCnt += this.delta_pic_order_cnt_bottom;
+
+                    /* standard specifies that prevPicOrderCntLsb is from previous
+                     * rererence frame . replace old value only if current frame is
+                     * rererence frame */
+                    if (this.nal.nal_ref_idc)
+                    {
+                        /* if current frame contains mmco5 . modify values to be
+                         * stored */
+                        if (containsMmco5)
+                        {
+                            poc.prevPicOrderCntMsb = 0;
+                            /* prevPicOrderCntLsb should be the top field picOrderCnt
+                             * if previous frame included mmco5. Top field picOrderCnt
+                             * for frames containing mmco5 is obtained by subtracting
+                             * the picOrderCnt from original top field order count .
+                             * value is zero if top field was the minimum, i.e. delta
+                             * for bottom was positive, otherwise value is
+                             * -deltaPicOrderCntBottom */
+                            if (this.delta_pic_order_cnt_bottom < 0)
+                                poc.prevPicOrderCntLsb =
+                                    (-this.delta_pic_order_cnt_bottom);
+                            else
+                                poc.prevPicOrderCntLsb = 0;
+                            picOrderCnt = 0;
+                        }
+                        else
+                        {
+                            poc.prevPicOrderCntLsb = this.pic_order_cnt_lsb;
+                        }
+                    }
+
+                    break;
+
+                case 1:
+                    console.log("poc 1, FF!!");
+                    /* step 1 (in the description in the standard) */
+                    // if (IS_IDR_NAL_UNIT(pNalUnit))
+                    //     frameNumOffset = 0;
+                    // else if (poc.prevFrameNum > pSliceHeader.frameNum)
+                    //     frameNumOffset = poc.prevFrameNumOffset + sps.maxFrameNum;
+                    // else
+                    //     frameNumOffset = poc.prevFrameNumOffset;
+                    //
+                    // /* step 2 */
+                    // if (sps.numRefFramesInPicOrderCntCycle)
+                    //     absFrameNum = frameNumOffset + pSliceHeader.frameNum;
+                    // else
+                    //     absFrameNum = 0;
+                    //
+                    // if (pNalUnit.nalRefIdc == 0 && absFrameNum > 0)
+                    //     absFrameNum -= 1;
+                    //
+                    // /* step 3 */
+                    // if (absFrameNum > 0)
+                    // {
+                    //     picOrderCntCycleCnt =
+                    //         (absFrameNum - 1)/sps.numRefFramesInPicOrderCntCycle;
+                    //     frameNumInPicOrderCntCycle =
+                    //         (absFrameNum - 1)%sps.numRefFramesInPicOrderCntCycle;
+                    // }
+                    //
+                    // /* step 4 */
+                    // expectedDeltaPicOrderCntCycle = 0;
+                    // for (i = 0; i < sps.numRefFramesInPicOrderCntCycle; i++)
+                    //     expectedDeltaPicOrderCntCycle += sps.offsetForRefFrame[i];
+                    //
+                    // /* step 5 (picOrderCnt used to store expectedPicOrderCnt) */
+                    // /*lint -esym(644,picOrderCntCycleCnt) always initialized */
+                    // /*lint -esym(644,frameNumInPicOrderCntCycle) always initialized */
+                    // if (absFrameNum > 0)
+                    // {
+                    //     picOrderCnt =
+                    //         (i32)picOrderCntCycleCnt * expectedDeltaPicOrderCntCycle;
+                    //     for (i = 0; i <= frameNumInPicOrderCntCycle; i++)
+                    //         picOrderCnt += sps.offsetForRefFrame[i];
+                    // }
+                    // else
+                    //     picOrderCnt = 0;
+                    //
+                    // if (pNalUnit.nalRefIdc == 0)
+                    //     picOrderCnt += sps.offsetForNonRefPic;
+                    //
+                    // /* step 6 (picOrderCnt is top field order cnt if delta for bottom
+                    //  * is positive, otherwise it is bottom field order cnt) */
+                    // picOrderCnt += pSliceHeader.deltaPicOrderCnt[0];
+                    //
+                    // if ( (sps.offsetForTopToBottomField +
+                    //     pSliceHeader.deltaPicOrderCnt[1]) < 0 )
+                    // {
+                    //     picOrderCnt += sps.offsetForTopToBottomField +
+                    //         pSliceHeader.deltaPicOrderCnt[1];
+                    // }
+                    //
+                    // /* if current picture contains mmco5 . set prevFrameNumOffset and
+                    //  * prevFrameNum to 0 for computation of picOrderCnt of next
+                    //  * frame, otherwise store frameNum and frameNumOffset to poc
+                    //  * structure */
+                    // if (!containsMmco5)
+                    // {
+                    //     poc.prevFrameNumOffset = frameNumOffset;
+                    //     poc.prevFrameNum = pSliceHeader.frameNum;
+                    // }
+                    // else
+                    // {
+                    //     poc.prevFrameNumOffset = 0;
+                    //     poc.prevFrameNum = 0;
+                    //     picOrderCnt = 0;
+                    // }
+                    break;
+
+                default: /* case 2 */
+                    var maxFrameNum = 1 << (this.decoder.sps.log2_max_frame_num_minus4 + 4);
+                    /* derive frameNumOffset */
+                    if (this.nal.nal_unit_type === _defs.NAL_SLICE_IDR)
+                        frameNumOffset = 0;
+                    else if (poc.prevFrameNum > this.frame_num)
+                        frameNumOffset = poc.prevFrameNumOffset + maxFrameNum;
+                    else
+                        frameNumOffset = poc.prevFrameNumOffset;
+
+                    /* derive picOrderCnt (type 2 has same value for top and bottom
+                     * field order cnts) */
+                    if (this.nal.nal_unit_type === _defs.NAL_SLICE_IDR)
+                        picOrderCnt = 0;
+                    else if (this.nal.nal_ref_idc === 0)
+                        picOrderCnt =
+                            2 * (frameNumOffset + this.frame_num) - 1;
+                    else
+                        picOrderCnt =
+                            2 * (frameNumOffset + this.frame_num);
+
+                    /* if current picture contains mmco5 . set prevFrameNumOffset and
+                     * prevFrameNum to 0 for computation of picOrderCnt of next
+                     * frame, otherwise store frameNum and frameNumOffset to poc
+                     * structure */
+                    if (!containsMmco5)
+                    {
+                        poc.prevFrameNumOffset = frameNumOffset;
+                        poc.prevFrameNum = this.frame_num;
+                    }
+                    else
+                    {
+                        poc.prevFrameNumOffset = 0;
+                        poc.prevFrameNum = 0;
+                        picOrderCnt = 0;
+                    }
+                    break;
+
+            }
+
+            return picOrderCnt;
+        },
         parse: function() {
             var qb = this.qb;
             /* slice_header() */
@@ -67,7 +278,7 @@ define([
             
             /* active pps and sps */
             this.decoder.activateParamSets(this.pic_parameter_set_id);
-            
+
             this.frame_num = qb.deqBits(this.nal.decoder.sps.log2_max_frame_num_minus4 + 4);
 
             if (this.nal.nal_unit_type === 5) {
@@ -130,21 +341,25 @@ define([
                 } else {
                     this.adaptive_ref_pic_marking_mode_flag = qb.deqBits(1);
                     if (this.adaptive_ref_pic_marking_mode_flag) {
+                        this.operation = [];
+                        var i = 0;
                         do {
-                            this.memory_management_control_operation = qb.deqUe();
-                            if (this.memory_management_control_operation === 1 || this.memory_management_control_operation === 3) {
-                                this.difference_of_pic_nums_minus1 = qb.deqUe();
+                            this.operation[i] = {};
+                            this.operation[i].memory_management_control_operation = qb.deqUe();
+                            if (this.operation[i].memory_management_control_operation === 1 || this.operation[i].memory_management_control_operation === 3) {
+                                this.operation[i].difference_of_pic_nums_minus1 = qb.deqUe();
                             }
-                            if (this.memory_management_control_operation === 2) {
-                                this.long_term_pic_num = qb.deqUe();
+                            if (this.operation[i].memory_management_control_operation === 2) {
+                                this.operation[i].long_term_pic_num = qb.deqUe();
                             }
-                            if (this.memory_management_control_operation === 3 || this.memory_management_control_operation === 6) {
-                                this.long_term_frame_idx = qb.deqUe();
+                            if (this.operation[i].memory_management_control_operation === 3 || this.operation[i].memory_management_control_operation === 6) {
+                                this.operation[i].long_term_frame_idx = qb.deqUe();
                             }
-                            if (this.memory_management_control_operation === 4) {
-                                this.max_long_term_frame_idx_plus1 = qb.deqUe();
+                            if (this.operation[i].memory_management_control_operation === 4) {
+                                this.operation[i].max_long_term_frame_idx_plus1 = qb.deqUe();
                             }
-                        } while (this.memory_management_control_operation !== 0);
+                            i++;
+                        } while (this.operation[i].memory_management_control_operation !== 0);
                     }
                 }
                 /* dec_ref_pic_marking() end */
@@ -183,9 +398,9 @@ define([
             }
             console.log('header', this.qb.bitindex, this);
             /* slice_header() end*/
-            _dpb.initRefPicList();
+            this.decoder.dpb.initRefPicList();
             if (this.ref_pic_list_reordering_flag_l0) {
-                _dpb.reorderRefPicList(this);
+                this.decoder.dpb.reorderRefPicList(this);
             }
 
 
@@ -277,27 +492,27 @@ define([
                     mb.decode();
                     console.log(CurrMbAddr, mb.mb_type, this.qb.bitindex, mb);
 
-                    var pw = this.decoder.sps.pic_width_in_mbs_minus1 + 1;
-                    var ph = this.decoder.sps.pic_height_in_map_units_minus1 + 1;
-                    if (mb.mbaddr === (pw * ph - 1)) {
-                        this.decoder.resetCurrImage();
-                        var yuv = new Array(pw * ph * 16 * 16 * 3 / 2);
-                        for (var i = 0; i < yuv.length; i++){
-                            yuv[i] = 128;
-                        }
-                        for (var i = 0; i < pw * ph; i++) {
-                            for (var j = 0; j < 16; j++) {
-                                var luma4x4 = this.decoder.mbs[i].decoded.lumas[j];
-                                for (var x = 0; x < 4; x++) {
-                                    for (var y = 0; y < 4; y++) {
-                                        yuv[pw * 16 * (Math.floor(i / pw) * 16 + 4 * (_defs.map4x4to16x16[j] >> 2) + x) + 16 * (i % pw) + 4 * (_defs.map4x4to16x16[j] % 4) + y] = luma4x4[x][y];
-                                    }
-                                }
-                            }
-
-                        }
-                        yuv2canvas(yuv, pw * 16, ph * 16, can);
-                    }
+                    // var pw = this.decoder.sps.pic_width_in_mbs_minus1 + 1;
+                    // var ph = this.decoder.sps.pic_height_in_map_units_minus1 + 1;
+                    // if (mb.mbaddr === (pw * ph - 1)) {
+                    //     this.decoder.resetCurrImage();
+                    //     var yuv = new Array(pw * ph * 16 * 16 * 3 / 2);
+                    //     for (var i = 0; i < yuv.length; i++){
+                    //         yuv[i] = 128;
+                    //     }
+                    //     for (var i = 0; i < pw * ph; i++) {
+                    //         for (var j = 0; j < 16; j++) {
+                    //             var luma4x4 = this.decoder.mbs[i].decoded.lumas[j];
+                    //             for (var x = 0; x < 4; x++) {
+                    //                 for (var y = 0; y < 4; y++) {
+                    //                     yuv[pw * 16 * (Math.floor(i / pw) * 16 + 4 * (_defs.map4x4to16x16[j] >> 2) + x) + 16 * (i % pw) + 4 * (_defs.map4x4to16x16[j] % 4) + y] = luma4x4[x][y];
+                    //                 }
+                    //             }
+                    //         }
+                    //
+                    //     }
+                    //     yuv2canvas(yuv, pw * 16, ph * 16, can);
+                    // }
                     /* macroblock_layer() end */
                 }
                 moreDataFlag = qb.more_rbsp_data();

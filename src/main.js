@@ -12,7 +12,8 @@ define([
     'de264/dpb',
     'de264/util'
 ], function(_nal, _ringbuffer, _sps, _pps, _slice, _defs, _macroblock_layer, _dpb, _util) {
-
+    var can = document.createElement('canvas');
+    document.body.appendChild(can);
 
     function Decoder() {
         this.buffer = _ringbuffer.create(1024 * 1024 * 2); // 2M buffer
@@ -30,8 +31,12 @@ define([
         resetCurrPic: function() {
             this.currPic = {
                 widthInMb: this.widthInMb,
-                heightInMb: this.heightInMb
+                heightInMb: this.heightInMb,
+                data: new Array(this.widthInMb * this.heightInMb * 384)
             };
+            for (var i = 0; i < this.currPic.data.length; i++) {
+                this.currPic.data[i] = 128;
+            }
         },
         filterPic: function() {
             var mbidx = 0;
@@ -52,12 +57,14 @@ define([
                 }
                 if (flags.filter_inner_edge || flags.filter_left_edge || flags.filter_top_edge) {
                     var bS = new Array(16);
-                    if (this.mbs[mbidx].getBoundaryStrengths(flags)) {
+                    if (this.mbs[mbidx].getBoundaryStrengths(bS, flags)) {
                         var thresholds = new Array(3);
+                        for (var i = 0; i < thresholds.length; i++) {
+                            thresholds[i] = {tc0: null, alpha: 0, beta: 0};
+                        }
                         this.mbs[mbidx].getLumaEdgeThresholds(thresholds, flags);
-                        var data = this.currPic.data + mbRow * this.widthInMb * 256 + mbCol * 16;
 
-                        this.mbs[mbidx].filterLuma(data, bS, thresholds, this.widthInMb*16);
+                        this.mbs[mbidx].filterLuma(this.currPic.data, mbRow * this.widthInMb * 256 + mbCol * 16, bS, thresholds, this.widthInMb*16);
 
                         /* chroma */
                         // GetChromaEdgeThresholds(thresholds, pMb, flags,
@@ -69,7 +76,14 @@ define([
                         //     thresholds, picWidthInMbs*8);
                     }
                 }
+                mbCol++;
+                if (mbCol == this.widthInMb)
+                {
+                    mbCol = 0;
+                    mbRow++;
+                }
             }
+            console.log(this.currPic.data);
         },
         decodeNal: function(buf) {
             var dv = new DataView(buf);
@@ -106,7 +120,10 @@ define([
                     if (this.currMb === this.mbs[this.picSizeInMb - 1]) { /* end of pic */
                         this.writeCurrPic();
                         this.filterPic();
-                        _dpb.markDecRefPic();
+                        var poc = {};
+                        var picOrderCnt = slice.decodePOC(poc);
+                        this.dpb.markDecRefPic(slice, nal.nal_unit_type === _defs.NAL_SLICE_IDR ? true : false, slice.frame_num, picOrderCnt);
+                        _util.yuv2canvas(this.currPic.data, this.width, this.height, can);
                     }
                     break;
                 default:
@@ -117,10 +134,10 @@ define([
         writeCurrPic: function() {
             for (var i in this.mbs) {
                 for (var j = 0; j < 16; j++) {
-                    var luma4x4 = this.decoder.mbs[i].decoded.lumas[j];
+                    var luma4x4 = this.mbs[i].decoded.lumas[j];
                     for (var x = 0; x < 4; x++) {
                         for (var y = 0; y < 4; y++) {
-                            this.currPic[this.widthInMb * 16 * (Math.floor(i / this.widthInMb) * 16 + 4 * (_defs.map4x4to16x16[j] >> 2) + x) + 16 * (i % this.widthInMb) + 4 * (_defs.map4x4to16x16[j] % 4) + y] = luma4x4[x][y];
+                            this.currPic.data[this.widthInMb * 16 * (Math.floor(i / this.widthInMb) * 16 + 4 * (_defs.map4x4to16x16[j] >> 2) + x) + 16 * (i % this.widthInMb) + 4 * (_defs.map4x4to16x16[j] % 4) + y] = luma4x4[x][y];
                         }
                     }
                 }
@@ -128,8 +145,8 @@ define([
         },
         initMbs: function() {
             this.mbs = [];
-            var pw = this.sps.pic_width_in_mbs_minus1 + 1;
-            var ph = this.sps.pic_height_in_map_units_minus1 + 1;
+            var pw = this.widthInMb;
+            var ph = this.heightInMb;
 
             /* allocate mbs memory */
             for (var i = 0; i < pw * ph; i++) {
@@ -185,7 +202,7 @@ define([
             });
         },
         activateParamSets: function(pps_id) {
-            if (!this.pps || pps_id !== this.decoder.pps.pic_parameter_set_id) {
+            if (!this.pps || pps_id !== this.pps.pic_parameter_set_id) {
                 this.pps = this.ppses[pps_id];
                 if (!this.sps || this.pps.seq_parameter_set_id !== this.sps.seq_parameter_set_id) {
                     this.sps = this.spses[this.pps.seq_parameter_set_id];
@@ -195,10 +212,7 @@ define([
                     this.width = this.widthInMb << 4;
                     this.height = this.heightInMb << 4;
                     this.picSizeInMb = this.widthInMb * this.heightInMb;
-                    this.currPic = {
-                        widthInMb: this.widthInMb,
-                        heightInMb: this.heightInMb
-                    };
+                    this.resetCurrPic();
                     this.initMbs();
                     this.initDpb();
                 }

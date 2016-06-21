@@ -137,7 +137,11 @@ define(function() {
          */
         map4x4to16x16: [0, 1, 4, 5, 2, 3, 6, 7, 8, 9, 12, 13, 10, 11, 14, 15],
         
-        SHORT_TERM: 0,
-        LONG_TERM: 1
+        /* image status in dpb */
+        UNUSED: 0,
+        NON_EXIST: 1,
+        SHORT_TERM: 2,
+        LONG_TERM: 3,
+        
     };
 });
