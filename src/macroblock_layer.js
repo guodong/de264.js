@@ -914,10 +914,22 @@ define([
         };
         this.prev_intra4x4_pred_mode_flag = [];
         this.rem_intra4x4_pred_mode = [];
-        this.mvs = new Array(16);
+        this.mv = new Array(16);
+        for (var i = 0; i < 16; i++) {
+            this.mv[i] = {ver: 0, hor: 0};
+        }
+        this.mvd_l0 = new Array(4);
+        for (var i = 0; i < 4; i++) {
+            this.mvd_l0[i] = {ver: 0, hor: 0};
+        }
         this.sub_mb_type = new Array(4);
-        this.subMbs = [];
         this.refPic = new Array(4);
+        this.ref_idx_l0 = [0, 0, 0, 0];
+        this.subMbs = [];
+        for (var i = 0; i < 4; i++) {
+            this.subMbs[i] = _subMb.create();
+        }
+        this.refAddr = [null, null, null, null];
     }
 
     Macroblock_layer.prototype = {
@@ -968,9 +980,6 @@ define([
                         this.mbPartHeight = 8;
                         break;
                 }
-            }
-            for (var i = 0; i < this.numMbPart; i++) {
-                this.subMbs[i] = _subMb.create();
             }
             /* init sub macroblocks end */
 
@@ -1037,6 +1046,8 @@ define([
                     if (this.slice.num_ref_idx_l0_active_minus1 > 0) {
                         this.ref_idx_l0 = [];
                         this.ref_idx_l0[mbPartIdx] = qb.deqTe((this.slice.num_ref_idx_l0_active_minus1 > 1));
+                    } else {
+                        this.ref_idx_l0 = [0, 0, 0, 0];
                     }
                 }
                 this.mvd_l0 = [];
@@ -1878,10 +1889,67 @@ define([
             }
 
         },
+        inverseMbPartScan: function(mbPartIdx) {
+            return {
+                x: _common.inverseRasterScan(mbPartIdx, this.mbPartWidth, this.mbPartHeight, 16, 0),
+                y: _common.inverseRasterScan(mbPartIdx, this.mbPartWidth, this.mbPartHeight, 16, 1),
+            };
+        },
+        inverseSubMbPartScan: function(mbPartIdx, subMbPartIdx) {
+            if (this.mb_type === _defs.P_8x8 || this.mb_type === _defs.P_8x8ref0) {
+                return {
+                    xS: _common.inverseRasterScan(subMbPartIdx, this.subMbs[mbPartIdx].subMbPartWidth, this.subMbs[mbPartIdx].subMbPartHeight, 8, 0),
+                    yS: _common.inverseRasterScan(subMbPartIdx, this.subMbs[mbPartIdx].subMbPartWidth, this.subMbs[mbPartIdx].subMbPartHeight, 8, 1),
+                };
+            } else {
+                return {
+                    xS: _common.inverseRasterScan(subMbPartIdx, 4, 4, 8, 0),
+                    yS: _common.inverseRasterScan(subMbPartIdx, 4, 4, 8, 1)
+                };
+            }
+        },
+        deriveNeighbouringPartitions: function(mbPartIdx, currSubMbType, subMbPartIdx) {
+            var pos = this.inverseMbPartScan(mbPartIdx);
+            var posS = {xS: 0, yS: 0};
+            if (this.mb_type === _defs.P_8x8 || this.mb_type === _defs.P_8x8ref0) {
+                posS = this.inverseSubMbPartScan(mbPartIdx, subMbPartIdx);
+            }
+            var predPartWidth;
+            if (this.mb_type === _defs.P_Skip) {
+                predPartWidth = 16;
+            } else if (this.mb_type === _defs.P_8x8 || this.mb_type === _defs.P_8x8ref0) {
+                predPartWidth = this.subMbs[mbPartIdx].subMbPartWidth;
+            } else {
+                predPartWidth = this.mbPartWidth;
+            }
+
+            var xyD = {xD: -1, yD: 0};
+            var xyN = {xN: pos.x + posS.xS + xyD.xD, yN: pos.y + posS.yS + xyD.yD};
+        },
+        deriveMotionDataOfNeighbouringPartitions: function(mbPartIdx, subMbPartIdx, currSubMbType) {
+
+        },
+        deriveLumaMvAndRefIdxSkip: function() {
+            var refIdxL0 = 0;
+            var currSubMbType = this.sub_mb_type[0];
+            this.deriveMotionDataOfNeighbouringPartitions(0, 0, currSubMbType);
+        },
+        deriveMvAndRefIdx: function(mbPartIdx, subMbPartIdx) {
+            if (this.mb_type === _defs.P_Skip) {
+                return this.deriveLumaMvAndRefIdxSkip();
+            }
+        },
         interPrediction: function() {
-            var row = (this.mbaddr / this.decoder.widthInMb) << 4;
+            // for (var mbPartIdx = 0; mbPartIdx < this.numMbPart; mbPartIdx++) {
+            //     for (var subMbPartIdx = 0; subMbPartIdx < this.numSubMbPart; numSubMbPart++) {
+            //         var mvCnt = 0;
+            //         var out = this.deriveMvAndRefIdx(mbPartIdx, subMbPartIdx);
+            //         mvCnt += out.subMvCnt;
+            //     }
+            // }
+            var row = Math.floor(this.mbaddr / this.decoder.widthInMb) << 4;
             var col = (this.mbaddr - row * this.decoder.widthInMb) << 4;
-            var refImage = {
+            this.refImage = {
                 width: this.decoder.widthInMb,
                 height: this.decoder.heightInMb
             };
@@ -1889,9 +1957,248 @@ define([
             switch (this.mb_type) {
                 case _defs.P_Skip:
                 case _defs.P_L0_16x16:
+                    // var mbPartIdx = 0;
+                    // var subMbPartIdx = 0;
+                    // var mvCnt = 0;
+                    // var mvL0 = this.deriveMv(mbPartIdx, subMbPartIdx);
                     this.mvPrediction16x16();
+                    this.refImage.data = this.refAddr[0];
+                    this.predictSamples(this.mv[0], col, row, 0, 0, 16, 16);
+                    break;
+                case _defs.P_L0_L0_16x8:
+                    this.mvPrediction16x8();
+                    this.refImage.data = this.refAddr[0];
+                    this.predictSamples(this.mv[0], col, row, 0, 0, 16, 8);
+                    this.refImage.data = this.refAddr[2];
+                    this.predictSamples(this.mv[8], col, row, 0, 0, 16, 8);
+                    break;
+                case _defs.P_L0_L0_8x16:
+                    this.mvPrediction8x16();
+                    this.refImage.data = this.refAddr[0];
+                    this.predictSamples(this.mv[0], col, row, 0, 0, 8, 16);
+                    this.refImage.data = this.refAddr[1];
+                    this.predictSamples(this.mv[4], col, row, 0, 0, 8, 16);
+                    break;
+                default:
+                    this.mvPrediction8x8();
+                    for (var i = 0; i < 4; i++) {
+                        this.refImage.data = this.refAddr[i];
+                        var x = i & 0x1 ? 8 : 0;
+                        var y = i < 2 ? 0 : 8;
+                        switch (this.subMbs[i].sub_mb_type) {
+                            case _defs.P_L0_8x8:
+                                this.predictSamples(this.mv[4 * i], col, row, x, y, 8, 8);
+                                break;
+                            case _defs.P_L0_8x4:
+                                this.predictSamples(this.mv[4 * i], col, row, x, y, 8, 4);
+                                this.predictSamples(this.mv[4 * i + 2], col, row, x, y + 4, 8, 4);
+                                break;
+                            case _defs.P_L0_4x8:
+                                this.predictSamples(this.mv[4 * i], col, row, x, y, 4, 8);
+                                this.predictSamples(this.mv[4 * i + 1], col, row, x + 4, y, 4, 8);
+                                break;
+                            default:
+                                this.predictSamples(this.mv[4 * i], col, row, x, y, 4, 4);
+                                this.predictSamples(this.mv[4 * i + 1], col, row, x + 4, y, 4, 4);
+                                this.predictSamples(this.mv[4 * i + 2], col, row, x, y + 4, 4, 4);
+                                this.predictSamples(this.mv[4 * i + 3], col, row, x + 4, y, 4, 4);
+                                break;
+                        }
+                    }
                     break;
             }
+        },
+        fillRow1: function(ref, fill, left, center, right) {
+            for (var i = 0; i < center; i++) {
+                fill[i] = ref[i];
+            }
+        },
+        fillRow7: function(ref, fill, left, center, right) {
+            var tmp;
+
+            if (left)
+                tmp = ref[0];
+
+            for (var i = 0; i < left; i++)
+                /*lint -esym(644,tmp)  tmp is initialized if used */
+                fill[i] = tmp;
+
+            for (var i = 0; i < center; i++)
+                fill[i] = ref[i];
+
+            if (right)
+                tmp = ref[-1];
+
+            // for ( ; right; right--)
+            //     /*lint -esym(644,tmp)  tmp is initialized if used */
+            //     fill++ = tmp;
+        },
+        fillBlock: function(ref, fill, x0, y0, width, height, blockWidth, blockHeight, fillScanLength) {
+            var xstop, ystop;
+            var fp = null;
+            var left, x, right;
+            var top, y, bottom;
+
+
+            xstop = x0 + blockWidth;
+            ystop = y0 + blockHeight;
+
+            /* Choose correct function whether overfilling on left-edge or right-edge
+             * is needed or not */
+            if (x0 >= 0 && xstop <= width)
+                fp = this.fillRow1;
+            else
+                fp = this.fillRow7;
+
+            if (ystop < 0)
+                y0 = -blockHeight;
+
+            if (xstop < 0)
+                x0 = -blockWidth;
+
+            if (y0 > height)
+                y0 = height;
+
+            if (x0 > width)
+                x0 = width;
+
+            xstop = x0 + blockWidth;
+            ystop = y0 + blockHeight;
+
+            if (x0 > 0)
+                ref += x0;
+
+            if (y0 > 0)
+                ref += y0 * width;
+
+            left = x0 < 0 ? -x0 : 0;
+            right = xstop > width ? xstop - width : 0;
+            x = blockWidth - left - right;
+
+            top = y0 < 0 ? -y0 : 0;
+            bottom = ystop > height ? ystop - height : 0;
+            y = blockHeight - top - bottom;
+
+            /* Top-overfilling */
+            for (; top; top--) {
+                fp(ref, fill, left, x, right);
+                fill += fillScanLength;
+            }
+
+            /* Lines inside reference image */
+            for (; y; y--) {
+                fp(ref, fill, left, x, right);
+                ref += width;
+                fill += fillScanLength;
+            }
+
+            ref -= width;
+
+            /* Bottom-overfilling */
+            for (; bottom; bottom--) {
+                fp(ref, fill, left, x, right);
+                fill += fillScanLength;
+            }
+        },
+        predictSamples: function(mv, xA, yA, partX, partY, partWidth, partHeight) {
+            var xFrac, yFrac, width, height;
+            var xInt, yInt;
+            var lumaPartData;
+            var refPic = this.refImage;
+            var lumaFracPos = [
+                /* G  d  h  n    a  e  i  p    b  f  j   q     c   g   k   r */
+                [0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]];
+
+
+            /* luma */
+            lumaPartData = 16 * partY + partX;
+
+            xFrac = mv.hor & 0x3;
+            yFrac = mv.ver & 0x3;
+
+            width = this.decoder.width;
+            height = this.decoder.height;
+
+            xInt = xA + partX + (mv.hor >> 2);
+            yInt = yA + partY + (mv.ver >> 2);
+
+            // switch (lumaFracPos[xFrac][yFrac]) {
+            //     case 0: /* G */
+            //         this.fillBlock(refPic.data, lumaPartData,
+            //             xInt, yInt, width, height, partWidth, partHeight, 16);
+            //         break;
+            //     case 1: /* d */
+            //         h264bsdInterpolateVerQuarter(refPic.data, lumaPartData,
+            //             xInt, yInt - 2, width, height, partWidth, partHeight, 0);
+            //         break;
+            //     case 2: /* h */
+            //         h264bsdInterpolateVerHalf(refPic.data, lumaPartData,
+            //             xInt, yInt - 2, width, height, partWidth, partHeight);
+            //         break;
+            //     case 3: /* n */
+            //         h264bsdInterpolateVerQuarter(refPic.data, lumaPartData,
+            //             xInt, yInt - 2, width, height, partWidth, partHeight, 1);
+            //         break;
+            //     case 4: /* a */
+            //         h264bsdInterpolateHorQuarter(refPic.data, lumaPartData,
+            //             xInt - 2, yInt, width, height, partWidth, partHeight, 0);
+            //         break;
+            //     case 5: /* e */
+            //         h264bsdInterpolateHorVerQuarter(refPic.data, lumaPartData,
+            //             xInt - 2, yInt - 2, width, height, partWidth, partHeight, 0);
+            //         break;
+            //     case 6: /* i */
+            //         h264bsdInterpolateMidHorQuarter(refPic.data, lumaPartData,
+            //             xInt - 2, yInt - 2, width, height, partWidth, partHeight, 0);
+            //         break;
+            //     case 7: /* p */
+            //         h264bsdInterpolateHorVerQuarter(refPic.data, lumaPartData,
+            //             xInt - 2, yInt - 2, width, height, partWidth, partHeight, 2);
+            //         break;
+            //     case 8: /* b */
+            //         h264bsdInterpolateHorHalf(refPic.data, lumaPartData,
+            //             xInt - 2, yInt, width, height, partWidth, partHeight);
+            //         break;
+            //     case 9: /* f */
+            //         h264bsdInterpolateMidVerQuarter(refPic.data, lumaPartData,
+            //             xInt - 2, yInt - 2, width, height, partWidth, partHeight, 0);
+            //         break;
+            //     case 10: /* j */
+            //         h264bsdInterpolateMidHalf(refPic.data, lumaPartData,
+            //             xInt - 2, yInt - 2, width, height, partWidth, partHeight);
+            //         break;
+            //     case 11: /* q */
+            //         h264bsdInterpolateMidVerQuarter(refPic.data, lumaPartData,
+            //             xInt - 2, yInt - 2, width, height, partWidth, partHeight, 1);
+            //         break;
+            //     case 12: /* c */
+            //         h264bsdInterpolateHorQuarter(refPic.data, lumaPartData,
+            //             xInt - 2, yInt, width, height, partWidth, partHeight, 1);
+            //         break;
+            //     case 13: /* g */
+            //         h264bsdInterpolateHorVerQuarter(refPic.data, lumaPartData,
+            //             xInt - 2, yInt - 2, width, height, partWidth, partHeight, 1);
+            //         break;
+            //     case 14: /* k */
+            //         h264bsdInterpolateMidHorQuarter(refPic.data, lumaPartData,
+            //             xInt - 2, yInt - 2, width, height, partWidth, partHeight, 1);
+            //         break;
+            //     default: /* case 15, r */
+            //         h264bsdInterpolateHorVerQuarter(refPic.data, lumaPartData,
+            //             xInt - 2, yInt - 2, width, height, partWidth, partHeight, 3);
+            //         break;
+            // }
+
+            /* chroma */
+            // PredictChroma(
+            //     data + 16 * 16 + (partY >> 1) * 8 + (partX >> 1),
+            //     xA + partX,
+            //     yA + partY,
+            //     partWidth,
+            //     partHeight,
+            //     mv,
+            //     refPic);
+
         },
         getInterNeighbour: function(mb, index) {
             var n = {
@@ -1916,10 +2223,11 @@ define([
         },
         mvPrediction16x16: function() {
             var refIndex = this.ref_idx_l0[0];
+            refIndex = refIndex || 0;
             var na = this.getInterNeighbour(this.mbA, 5);
             var nb = this.getInterNeighbour(this.mbB, 10);
             var mv = {hor: 0, ver: 0};
-            if (!na.avaliable || !nb.avaliable || (na.refIndex === 0 && (na.mv.hor === 0 && na.mv.ver === 0)) || (nb.refIndex === 0 && (nb.mv.hor === 0 && nb.mv.ver === 0))) {
+            if (this.mb_type === _defs.P_Skip && (!na.avaliable || !nb.avaliable || (na.refIndex === 0 && (na.mv.hor === 0 && na.mv.ver === 0)) || (nb.refIndex === 0 && (nb.mv.hor === 0 && nb.mv.ver === 0)))) {
                 mv.hor = mv.ver = 0;
             } else {
                 mv = this.mvd_l0[0];
@@ -1929,7 +2237,7 @@ define([
                 }
 
                 var mvPred = {};
-                if (na.avaliable || nb.avaliable || nc.avaliable) {
+                if (!na.avaliable || nb.avaliable || nc.avaliable) {
                     var isA = (na.refIndex === refIndex) ? 1 : 0;
                     var isB = (nb.refIndex === refIndex) ? 1 : 0;
                     var isC = (nc.refIndex === refIndex) ? 1 : 0;
@@ -1951,10 +2259,288 @@ define([
             }
 
             for (var i = 0; i < 16; i++) {
-                this.mvs[i] = mv;
+                this.mv[i] = mv;
             }
             for (var i = 0; i < 4; i++) {
                 this.refPic[i] = refIndex;
+                this.refAddr[i] = this.decoder.dpb.refPicList0[refIndex].data;
+            }
+            //console.log(this.mbaddr, JSON.stringify(this.mv));
+        },
+        mvPrediction16x8: function() {
+            var mvPred = {hor: 0, ver: 0};
+            var mv = this.mvd_l0[0];
+            var refIndex = this.ref_idx_l0[0];
+            var nb = this.getInterNeighbour(this.mbB, 10);
+            if (nb.refIndex === refIndex) {
+                mvPred = nb.mv;
+            } else {
+                var na = this.getInterNeighbour(this.mbA, 5);
+                var nc = this.getInterNeighbour(this.mbC, 10);
+                if (!nc.avaliable) {
+                    nc = this.getInterNeighbour(this.mbD, 15);
+                }
+                if (!na.avaliable || nb.avaliable || nc.avaliable) {
+                    var isA = (na.refIndex === refIndex) ? 1 : 0;
+                    var isB = (nb.refIndex === refIndex) ? 1 : 0;
+                    var isC = (nc.refIndex === refIndex) ? 1 : 0;
+                    if ((isA + isB + isC) !== 1) {
+                        mvPred.hor = _common.medianFilter(na.mv.hor, nb.mv.hor, nc.mv.hor);
+                        mvPred.ver = _common.medianFilter(na.mv.ver, nb.mv.ver, nc.mv.ver);
+                    } else if (isA) {
+                        mvPred = na.mv;
+                    } else if (isB) {
+                        mvPred = nb.mv;
+                    } else {
+                        mvPred = nc.mv;
+                    }
+                } else {
+                    mvPred = na.mv;
+                }
+            }
+            mv.hor += mvPred.hor;
+            mv.ver += mvPred.ver;
+
+            for (var i = 0; i < 8; i++) {
+                this.mv[i] = mv;
+            }
+
+            this.refPic[0] = refIndex;
+            this.refPic[1] = refIndex;
+            this.refAddr[0] = this.decoder.dpb.refPicList0[refIndex].data;
+            this.refAddr[1] = this.decoder.dpb.refPicList0[refIndex].data;
+
+            mv = this.mvd_l0[1];
+            refIndex = this.ref_idx_l0[1];
+            var na = this.getInterNeighbour(this.mbA, 13);
+            if (na.refIndex === refIndex) {
+                mvPred = na.mv;
+            } else {
+                nb.avaliable = true;
+                nb.refIndex = this.refPic[0];
+                nb.mv = this.mv[0];
+
+                var nc = this.getInterNeighbour(this.mbA, 7);
+                if (!na.avaliable || nb.avaliable || nc.avaliable) {
+                    var isA = (na.refIndex === refIndex) ? 1 : 0;
+                    var isB = (nb.refIndex === refIndex) ? 1 : 0;
+                    var isC = (nc.refIndex === refIndex) ? 1 : 0;
+                    if ((isA + isB + isC) !== 1) {
+                        mvPred.hor = _common.medianFilter(na.mv.hor, nb.mv.hor, nc.mv.hor);
+                        mvPred.ver = _common.medianFilter(na.mv.ver, nb.mv.ver, nc.mv.ver);
+                    } else if (isA) {
+                        mvPred = na.mv;
+                    } else if (isB) {
+                        mvPred = nb.mv;
+                    } else {
+                        mvPred = nc.mv;
+                    }
+                } else {
+                    mvPred = na.mv;
+                }
+            }
+            mv.hor += mvPred.hor;
+            mv.ver += mvPred.ver;
+
+            for (var i = 8; i < 16; i++) {
+                this.mv[i] = mv;
+            }
+            this.refPic[2] = refIndex;
+            this.refPic[3] = refIndex;
+            this.refAddr[2] = this.decoder.dpb.refPicList0[refIndex].data;
+            this.refAddr[3] = this.decoder.dpb.refPicList0[refIndex].data;
+            //console.log(this.mbaddr, JSON.stringify(this.mv));
+        },
+        mvPrediction8x16: function() {
+            var mvPred = {hor: 0, ver: 0};
+            var mv = this.mvd_l0[0];
+            var refIndex = this.ref_idx_l0[0];
+            var na = this.getInterNeighbour(this.mbA, 5);
+            if (na.refIndex === refIndex) {
+                mvPred = na.mv;
+            } else {
+                var nb = this.getInterNeighbour(this.mbB, 10);
+                var nc = this.getInterNeighbour(this.mbB, 14);
+                if (!nc.avaliable) {
+                    nc = this.getInterNeighbour(this.mbD, 15);
+                }
+                if (!na.avaliable || nb.avaliable || nc.avaliable) {
+                    var isA = (na.refIndex === refIndex) ? 1 : 0;
+                    var isB = (nb.refIndex === refIndex) ? 1 : 0;
+                    var isC = (nc.refIndex === refIndex) ? 1 : 0;
+                    if ((isA + isB + isC) !== 1) {
+                        mvPred.hor = _common.medianFilter(na.mv.hor, nb.mv.hor, nc.mv.hor);
+                        mvPred.ver = _common.medianFilter(na.mv.ver, nb.mv.ver, nc.mv.ver);
+                    } else if (isA) {
+                        mvPred = na.mv;
+                    } else if (isB) {
+                        mvPred = nb.mv;
+                    } else {
+                        mvPred = nc.mv;
+                    }
+                } else {
+                    mvPred = na.mv;
+                }
+            }
+            mv.hor += mvPred.hor;
+            mv.ver += mvPred.ver;
+
+            for (var i = 0; i < 4; i++) {
+                this.mv[i] = mv;
+            }
+            for (var i = 8; i < 12; i++) {
+                this.mv[i] = mv;
+            }
+
+            this.refPic[0] = refIndex;
+            this.refPic[2] = refIndex;
+            this.refAddr[0] = this.decoder.dpb.refPicList0[refIndex].data;
+            this.refAddr[2] = this.decoder.dpb.refPicList0[refIndex].data;
+
+            mv = this.mvd_l0[1];
+            refIndex = this.ref_idx_l0[1];
+            var nc = this.getInterNeighbour(this.mbC, 10);
+            if (!nc.avaliable) {
+                nc = this.getInterNeighbour(this.mbB, 11);
+            }
+            if (nc.refIndex === refIndex) {
+                mvPred = nc.mv;
+            } else {
+                na.avaliable = true;
+                na.refIndex = this.refPic[0];
+                na.mv = this.mv[0];
+
+                var nb = this.getInterNeighbour(this.mbB, 14);
+                if (!na.avaliable || nb.avaliable || nc.avaliable) {
+                    var isA = (na.refIndex === refIndex) ? 1 : 0;
+                    var isB = (nb.refIndex === refIndex) ? 1 : 0;
+                    var isC = (nc.refIndex === refIndex) ? 1 : 0;
+                    if ((isA + isB + isC) !== 1) {
+                        mvPred.hor = _common.medianFilter(na.mv.hor, nb.mv.hor, nc.mv.hor);
+                        mvPred.ver = _common.medianFilter(na.mv.ver, nb.mv.ver, nc.mv.ver);
+                    } else if (isA) {
+                        mvPred = na.mv;
+                    } else if (isB) {
+                        mvPred = nb.mv;
+                    } else {
+                        mvPred = nc.mv;
+                    }
+                } else {
+                    mvPred = na.mv;
+                }
+            }
+            mv.hor += mvPred.hor;
+            mv.ver += mvPred.ver;
+
+            for (var i = 4; i < 8; i++) {
+                this.mv[i] = mv;
+            }
+            for (var i = 12; i < 16; i++) {
+                this.mv[i] = mv;
+            }
+            this.refPic[1] = refIndex;
+            this.refPic[3] = refIndex;
+            this.refAddr[1] = this.decoder.dpb.refPicList0[refIndex].data;
+            this.refAddr[3] = this.decoder.dpb.refPicList0[refIndex].data;
+            //console.log(this.mbaddr, JSON.stringify(this.mv));
+        },
+        mvPrediction8x8: function() {
+            for (var i = 0; i < 4; i++) {
+                this.refPic[i] = this.ref_idx_l0[i];
+                this.refAddr[i] = this.decoder.dpb.refPicList0[this.refPic[i]].data;
+                for (var j = 0; j < this.subMbs.numSubMbPart; j++) {
+                    this.mvPrediction(i, j);
+                }
+            }
+        },
+        getNeighbourMb: function(neighbour) {
+            if (neighbour == _defs.MB_A)
+                return (this.mbA);
+            else if (neighbour == _defs.MB_B)
+                return (this.mbB);
+            else if (neighbour == _defs.MB_C)
+                return (this.mbC);
+            else if (neighbour == _defs.MB_D)
+                return (this.mbD);
+            else if (neighbour == _defs.MB_CURR)
+                return this;
+            else
+                return null;
+        },
+        mvPrediction: function(mbPartIdx, subMbPartIdx) {
+            var mv, mvPred;
+            var refIndex;
+            var subMbPartMode;
+            var n;
+            var nMb;
+            var na, nb, nc;
+
+
+            mv = this.mvd_l0[mbPartIdx][subMbPartIdx];
+            subMbPartMode = this.subMbs[mbPartIdx].sub_mb_type;
+            refIndex = this.ref_idx_l0[mbPartIdx];
+
+            n = _defs.N_A_SUB_PART[mbPartIdx][subMbPartMode][subMbPartIdx];
+            nMb = this.getNeighbourMb(n[0]);
+            na = this.getInterNeighbour(nMb, n[1]);
+
+            n = _defs.N_B_SUB_PART[mbPartIdx][subMbPartMode][subMbPartIdx];
+            nMb = this.getNeighbourMb(n[0]);
+            nb = this.getInterNeighbour(nMb, n[1]);
+
+            n = _defs.N_C_SUB_PART[mbPartIdx][subMbPartMode][subMbPartIdx];
+            nMb = this.getNeighbourMb(n[0]);
+            nc = this.getInterNeighbour(nMb, n[1]);
+
+            if (!nc.available) {
+                n = _defs.N_D_SUB_PART[mbPartIdx][subMbPartMode][subMbPartIdx];
+                nMb = this.getNeighbourMb(n[0]);
+                nc = this.getInterNeighbour(nMb, n[1]);
+            }
+
+
+            if (!na.avaliable || nb.avaliable || nc.avaliable) {
+                var isA = (na.refIndex === refIndex) ? 1 : 0;
+                var isB = (nb.refIndex === refIndex) ? 1 : 0;
+                var isC = (nc.refIndex === refIndex) ? 1 : 0;
+                if ((isA + isB + isC) !== 1) {
+                    mvPred.hor = _common.medianFilter(na.mv.hor, nb.mv.hor, nc.mv.hor);
+                    mvPred.ver = _common.medianFilter(na.mv.ver, nb.mv.ver, nc.mv.ver);
+                } else if (isA) {
+                    mvPred = na.mv;
+                } else if (isB) {
+                    mvPred = nb.mv;
+                } else {
+                    mvPred = nc.mv;
+                }
+            } else {
+                mvPred = na.mv;
+            }
+
+            mv.hor += mvPred.hor;
+            mv.ver += mvPred.ver;
+
+            switch (subMbPartMode) {
+                case _defs.P_L0_8x8:
+                    this.mv[4 * mbPartIdx] = mv;
+                    this.mv[4 * mbPartIdx + 1] = mv;
+                    this.mv[4 * mbPartIdx + 2] = mv;
+                    this.mv[4 * mbPartIdx + 3] = mv;
+                    break;
+
+                case _defs.P_L0_8x4:
+                    this.mv[4 * mbPartIdx + 2 * subMbPartIdx] = mv;
+                    this.mv[4 * mbPartIdx + 2 * subMbPartIdx + 1] = mv;
+                    break;
+
+                case _defs.P_L0_4x8:
+                    this.mv[4 * mbPartIdx + subMbPartIdx] = mv;
+                    this.mv[4 * mbPartIdx + subMbPartIdx + 2] = mv;
+                    break;
+
+                case _defs.P_L0_4x4:
+                    this.mv[4 * mbPartIdx + subMbPartIdx] = mv;
+                    break;
             }
         },
         getBoundaryStrengths: function(bS, flags) {
@@ -2006,7 +2592,7 @@ define([
                 };
             }
             if (flags.filter_left_edge) {
-                if (this.type === _defs.I_MB || this.mbB.type === _defs.I_MB) {
+                if (this.type === _defs.I_MB || (this.mbB && this.mbB.type === _defs.I_MB)) {
                     for (var i = 0; i < 4; i += 4) {
                         bS[i] = {
                             left: 4
@@ -2015,16 +2601,16 @@ define([
                     nonZeroBs = true;
                 } else {
                     bS[0] = {
-                        top: edgeBoundaryStrength(this, this.mbB, 0, 5)
+                        left: edgeBoundaryStrength(this, this.mbA, 0, 5)
                     };
                     bS[4] = {
-                        top: edgeBoundaryStrength(this, this.mbB, 2, 7)
+                        left: edgeBoundaryStrength(this, this.mbA, 2, 7)
                     };
                     bS[8] = {
-                        top: edgeBoundaryStrength(this, this.mbB, 8, 13)
+                        left: edgeBoundaryStrength(this, this.mbA, 8, 13)
                     };
                     bS[12] = {
-                        top: edgeBoundaryStrength(this, this.mbB, 10, 15)
+                        left: edgeBoundaryStrength(this, this.mbA, 10, 15)
                     };
                     if (!nonZeroBs && (bS[0].top || bS[4].top || bS[8].top || bS[12].top)) {
                         nonZeroBs = true;
@@ -2032,16 +2618,16 @@ define([
                 }
             } else {
                 bS[0] = {
-                    top: 0
+                    left: 0
                 };
                 bS[4] = {
-                    top: 0
+                    left: 0
                 };
                 bS[8] = {
-                    top: 0
+                    left: 0
                 };
                 bS[12] = {
-                    top: 0
+                    left: 0
                 };
             }
             if (this.type === _defs.I_MB) {
@@ -2292,11 +2878,11 @@ define([
                 if (tmp[0].left)
                     FilterVerLumaEdge(ptr, index, tmp[0].left, thresholds[1], width);
                 if (tmp[1].left)
-                    FilterVerLumaEdge(ptr, index+4, tmp[1].left, thresholds[2], width);
+                    FilterVerLumaEdge(ptr, index + 4, tmp[1].left, thresholds[2], width);
                 if (tmp[2].left)
-                    FilterVerLumaEdge(ptr, index+8, tmp[2].left, thresholds[2], width);
+                    FilterVerLumaEdge(ptr, index + 8, tmp[2].left, thresholds[2], width);
                 if (tmp[3].left)
-                    FilterVerLumaEdge(ptr, index+12, tmp[3].left, thresholds[2], width);
+                    FilterVerLumaEdge(ptr, index + 12, tmp[3].left, thresholds[2], width);
 
                 /* if bS is equal for all horizontal edges of the row . perform
                  * filtering with FilterHorLuma, otherwise use FilterHorLumaEdge for
@@ -2312,18 +2898,18 @@ define([
                         FilterHorLumaEdge(ptr, index, tmp[0].top, thresholds[offset],
                             width);
                     if (tmp[1].top)
-                        FilterHorLumaEdge(ptr, index+4, tmp[1].top, thresholds[offset],
+                        FilterHorLumaEdge(ptr, index + 4, tmp[1].top, thresholds[offset],
                             width);
                     if (tmp[2].top)
-                        FilterHorLumaEdge(ptr, index+8, tmp[2].top, thresholds[offset],
+                        FilterHorLumaEdge(ptr, index + 8, tmp[2].top, thresholds[offset],
                             width);
                     if (tmp[3].top)
-                        FilterHorLumaEdge(ptr, index+12, tmp[3].top, thresholds[offset],
+                        FilterHorLumaEdge(ptr, index + 12, tmp[3].top, thresholds[offset],
                             width);
                 }
 
                 /* four pixel rows ahead, i.e. next row of 4x4-blocks */
-                index += width*4;
+                index += width * 4;
                 tmp = tmp.slice(4);
                 offset = 2;
             }
@@ -2398,6 +2984,7 @@ define([
             255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255
         ];
     var h264Clip = h264Cliparr.slice(512);
+
     function FilterVerLumaEdge(data, index, bS, thresholds, imageWidth) {
 
         /* Variables */
@@ -2413,24 +3000,24 @@ define([
             tc = thresholds.tc0[bS - 1];
             tmp = tc;
             for (i = 4; i; i--, index += imageWidth) {
-                p1 = data[index-2];
-                p0 = data[index-1];
+                p1 = data[index - 2];
+                p0 = data[index - 1];
                 q0 = data[index];
-                q1 = data[index+1];
+                q1 = data[index + 1];
                 if ((Math.abs(p0 - q0) < thresholds.alpha) &&
                     (Math.abs(p1 - p0) < thresholds.beta) &&
                     (Math.abs(q1 - q0) < thresholds.beta)) {
-                    p2 = data[index-3];
-                    q2 = data[index+2];
+                    p2 = data[index - 3];
+                    q2 = data[index + 2];
 
                     if (Math.abs(p2 - p0) < thresholds.beta) {
-                        data[index-2] = (p1 + _common.clip3(-tc, tc,
+                        data[index - 2] = (p1 + _common.clip3(-tc, tc,
                             (p2 + ((p0 + q0 + 1) >> 1) - (p1 << 1)) >> 1));
                         tmp++;
                     }
 
                     if (Math.abs(q2 - q0) < thresholds.beta) {
-                        data[index+1] = (q1 + _common.clip3(-tc, tc,
+                        data[index + 1] = (q1 + _common.clip3(-tc, tc,
                             (q2 + ((p0 + q0 + 1) >> 1) - (q1 << 1)) >> 1));
                         tmp++;
                     }
@@ -2441,39 +3028,39 @@ define([
                     p0 = clp[p0 + delta];
                     q0 = clp[q0 - delta];
                     tmp = tc;
-                    data[index-1] = p0;
+                    data[index - 1] = p0;
                     data[index] = q0;
                 }
             }
         }
         else {
             for (i = 4; i; i--, index += imageWidth) {
-                p1 = data[index-2];
-                p0 = data[index-1];
+                p1 = data[index - 2];
+                p0 = data[index - 1];
                 q0 = data[index];
-                q1 = data[index+1];
+                q1 = data[index + 1];
                 if ((Math.abs(p0 - q0) < thresholds.alpha) &&
                     (Math.abs(p1 - p0) < thresholds.beta) &&
                     (Math.abs(q1 - q0) < thresholds.beta)) {
                     tmpFlag = (Math.abs(p0 - q0) < ((thresholds.alpha >> 2) + 2)) ? true : false;
 
-                    p2 = data[index-3];
-                    q2 = data[index+2];
+                    p2 = data[index - 3];
+                    q2 = data[index + 2];
 
                     if (tmpFlag && Math.abs(p2 - p0) < thresholds.beta) {
                         tmp = p1 + p0 + q0;
-                        data[index-1] = ((p2 + 2 * tmp + q1 + 4) >> 3);
-                        data[index-2] = ((p2 + tmp + 2) >> 2);
-                        data[index-3] = ((2 * data[index-4] + 3 * p2 + tmp + 4) >> 3);
+                        data[index - 1] = ((p2 + 2 * tmp + q1 + 4) >> 3);
+                        data[index - 2] = ((p2 + tmp + 2) >> 2);
+                        data[index - 3] = ((2 * data[index - 4] + 3 * p2 + tmp + 4) >> 3);
                     }
                     else
-                        data[index-1] = (2 * p1 + p0 + q1 + 2) >> 2;
+                        data[index - 1] = (2 * p1 + p0 + q1 + 2) >> 2;
 
                     if (tmpFlag && Math.abs(q2 - q0) < thresholds.beta) {
                         tmp = p0 + q0 + q1;
                         data[index] = ((p1 + 2 * tmp + q2 + 4) >> 3);
-                        data[index+1] = ((tmp + q2 + 2) >> 2);
-                        data[index+2] = ((2 * data[index+3] + 3 * q2 + tmp + 4) >> 3);
+                        data[index + 1] = ((tmp + q2 + 2) >> 2);
+                        data[index + 2] = ((2 * data[index + 3] + 3 * q2 + tmp + 4) >> 3);
                     }
                     else
                         data[index] = ((2 * q1 + q0 + p1 + 2) >> 2);
@@ -2498,25 +3085,25 @@ define([
             tc = thresholds.tc0[bS - 1];
             tmp = tc;
             for (i = 16; i; i--, index++) {
-                p1 = data[index-imageWidth * 2];
-                p0 = data[index-imageWidth];
+                p1 = data[index - imageWidth * 2];
+                p0 = data[index - imageWidth];
                 q0 = data[index];
-                q1 = data[index+imageWidth];
+                q1 = data[index + imageWidth];
                 if ((Math.abs(p0 - q0) < thresholds.alpha) &&
                     (Math.abs(p1 - p0) < thresholds.beta) &&
                     (Math.abs(q1 - q0) < thresholds.beta)) {
-                    p2 = data[index-imageWidth * 3];
+                    p2 = data[index - imageWidth * 3];
 
                     if (Math.abs(p2 - p0) < thresholds.beta) {
-                        data[index-imageWidth * 2] = (p1 + _common.clip3(-tc, tc,
+                        data[index - imageWidth * 2] = (p1 + _common.clip3(-tc, tc,
                             (p2 + ((p0 + q0 + 1) >> 1) - (p1 << 1)) >> 1));
                         tmp++;
                     }
 
-                    q2 = data[index+imageWidth * 2];
+                    q2 = data[index + imageWidth * 2];
 
                     if (Math.abs(q2 - q0) < thresholds.beta) {
-                        data[index+imageWidth] = (q1 + _common.clip3(-tc, tc,
+                        data[index + imageWidth] = (q1 + _common.clip3(-tc, tc,
                             (q2 + ((p0 + q0 + 1) >> 1) - (q1 << 1)) >> 1));
                         tmp++;
                     }
@@ -2527,40 +3114,40 @@ define([
                     p0 = clp[p0 + delta];
                     q0 = clp[q0 - delta];
                     tmp = tc;
-                    data[index-imageWidth] = p0;
+                    data[index - imageWidth] = p0;
                     data[index] = q0;
                 }
             }
         }
         else {
             for (i = 16; i; i--, index++) {
-                p1 = data[index-imageWidth * 2];
-                p0 = data[index-imageWidth];
+                p1 = data[index - imageWidth * 2];
+                p0 = data[index - imageWidth];
                 q0 = data[index];
-                q1 = data[index+imageWidth];
+                q1 = data[index + imageWidth];
                 if ((Math.abs(p0 - q0) < thresholds.alpha) &&
                     (Math.abs(p1 - p0) < thresholds.beta) &&
                     (Math.abs(q1 - q0) < thresholds.beta)) {
                     tmpFlag = (Math.abs(p0 - q0) < ((thresholds.alpha >> 2) + 2)) ? true : false;
 
-                    p2 = data[index-imageWidth * 3];
-                    q2 = data[index+imageWidth * 2];
+                    p2 = data[index - imageWidth * 3];
+                    q2 = data[index + imageWidth * 2];
 
                     if (tmpFlag && Math.abs(p2 - p0) < thresholds.beta) {
                         tmp = p1 + p0 + q0;
-                        data[index-imageWidth] = ((p2 + 2 * tmp + q1 + 4) >> 3);
-                        data[index-imageWidth * 2] = ((p2 + tmp + 2) >> 2);
-                        data[index-imageWidth * 3] = ((2 * data[index-imageWidth * 4] +
+                        data[index - imageWidth] = ((p2 + 2 * tmp + q1 + 4) >> 3);
+                        data[index - imageWidth * 2] = ((p2 + tmp + 2) >> 2);
+                        data[index - imageWidth * 3] = ((2 * data[index - imageWidth * 4] +
                         3 * p2 + tmp + 4) >> 3);
                     }
                     else
-                        data[index-imageWidth] = ((2 * p1 + p0 + q1 + 2) >> 2);
+                        data[index - imageWidth] = ((2 * p1 + p0 + q1 + 2) >> 2);
 
                     if (tmpFlag && Math.abs(q2 - q0) < thresholds.beta) {
                         tmp = p0 + q0 + q1;
                         data[index] = ((p1 + 2 * tmp + q2 + 4) >> 3);
-                        data[index+imageWidth] = ((tmp + q2 + 2) >> 2);
-                        data[index+imageWidth * 2] = ((2 * data[index+imageWidth * 3] +
+                        data[index + imageWidth] = ((tmp + q2 + 2) >> 2);
+                        data[index + imageWidth * 2] = ((2 * data[index + imageWidth * 3] +
                         3 * q2 + tmp + 4) >> 3);
                     }
                     else
@@ -2584,25 +3171,25 @@ define([
         tc = thresholds.tc0[bS - 1];
         tmp = tc;
         for (i = 4; i; i--, index++) {
-            p1 = data[index-imageWidth * 2];
-            p0 = data[index-imageWidth];
+            p1 = data[index - imageWidth * 2];
+            p0 = data[index - imageWidth];
             q0 = data[index];
-            q1 = data[index+imageWidth];
+            q1 = data[index + imageWidth];
             if ((Math.abs(p0 - q0) < thresholds.alpha) &&
                 (Math.abs(p1 - p0) < thresholds.beta) &&
                 (Math.abs(q1 - q0) < thresholds.beta)) {
-                p2 = data[index-imageWidth * 3];
+                p2 = data[index - imageWidth * 3];
 
                 if (Math.abs(p2 - p0) < thresholds.beta) {
-                    data[index-imageWidth * 2] = (p1 + _common.clip3(-tc, tc,
+                    data[index - imageWidth * 2] = (p1 + _common.clip3(-tc, tc,
                         (p2 + ((p0 + q0 + 1) >> 1) - (p1 << 1)) >> 1));
                     tmp++;
                 }
 
-                q2 = data[index+imageWidth * 2];
+                q2 = data[index + imageWidth * 2];
 
                 if (Math.abs(q2 - q0) < thresholds.beta) {
-                    data[index+imageWidth] = (q1 + _common.clip3(-tc, tc,
+                    data[index + imageWidth] = (q1 + _common.clip3(-tc, tc,
                         (q2 + ((p0 + q0 + 1) >> 1) - (q1 << 1)) >> 1));
                     tmp++;
                 }
@@ -2613,7 +3200,7 @@ define([
                 p0 = clp[p0 + delta];
                 q0 = clp[q0 - delta];
                 tmp = tc;
-                data[index-imageWidth] = p0;
+                data[index - imageWidth] = p0;
                 data[index] = q0;
             }
         }

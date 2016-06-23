@@ -461,6 +461,11 @@ define([
                             for (var j = 0; j < mb.rem_intra4x4_pred_mode.length; j++) {
                                 mb.rem_intra4x4_pred_mode[j] = 0;
                             }
+                            mb.numMbPart = 1;
+                            mb.numSubMbPart = 1;
+                            mb.sub_mb_type[0] = _defs.NA;
+                            mb.mbPartWidth = 16;
+                            mb.mbPartHeight = 16;
                             mb.decode();
 
                             CurrMbAddr = NextMbAddress(CurrMbAddr);
@@ -490,7 +495,7 @@ define([
                     mb.parse(this.qb);
 
                     mb.decode();
-                    console.log(CurrMbAddr, mb.mb_type, this.qb.bitindex, mb);
+                    //console.log(CurrMbAddr, mb.mb_type, this.qb.bitindex, mb);
 
                     // var pw = this.decoder.sps.pic_width_in_mbs_minus1 + 1;
                     // var ph = this.decoder.sps.pic_height_in_map_units_minus1 + 1;

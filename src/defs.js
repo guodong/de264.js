@@ -7,16 +7,18 @@ define(function() {
 
     //noinspection JSAnnotator
     return {
+        NA: -1,
+
         /* nal types */
         NAL_SLICE: 1,
         NAL_SLICE_IDR: 5,
         NAL_SPS: 7,
         NAL_PPS: 8,
-        
+
         /* slice types */
         P_SLICE: 0,
         I_SLICE: 2,
-        
+
         /* macroblock types */
         I_MB: 0,
         P_MB: 1,
@@ -32,13 +34,13 @@ define(function() {
         PRED_MODE_INTER: 2,
 
         /* mb_type names of P mb */
+        P_Skip: -1,
         P_L0_16x16: 0,
         P_L0_L0_16x8: 1,
         P_L0_L0_8x16: 2,
         P_8x8: 3,
         P_8x8ref0: 4,
-        P_Skip: 128,
-        
+
         P_L0_8x8: 0,
         P_L0_8x4: 1,
         P_L0_4x8: 2,
@@ -136,12 +138,96 @@ define(function() {
          *     10 11 14 15     12 13 14 15
          */
         map4x4to16x16: [0, 1, 4, 5, 2, 3, 6, 7, 8, 9, 12, 13, 10, 11, 14, 15],
-        
+
         /* image status in dpb */
         UNUSED: 0,
         NON_EXIST: 1,
         SHORT_TERM: 2,
         LONG_TERM: 3,
-        
+
+        N_A_SUB_PART: [
+            [[[MB_A, 5], [MB_NA, 0], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_A, 5], [MB_A, 7], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_A, 5], [MB_CURR, 0], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_A, 5], [MB_CURR, 0], [MB_A, 7], [MB_CURR, 2]]],
+
+            [[[MB_CURR, 1], [MB_NA, 0], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_CURR, 1], [MB_CURR, 3], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_CURR, 1], [MB_CURR, 4], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_CURR, 1], [MB_CURR, 4], [MB_CURR, 3], [MB_CURR, 6]]],
+
+            [[[MB_A, 13], [MB_NA, 0], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_A, 13], [MB_A, 15], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_A, 13], [MB_CURR, 8], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_A, 13], [MB_CURR, 8], [MB_A, 15], [MB_CURR, 10]]],
+
+            [[[MB_CURR, 9], [MB_NA, 0], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_CURR, 9], [MB_CURR, 11], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_CURR, 9], [MB_CURR, 12], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_CURR, 9], [MB_CURR, 12], [MB_CURR, 11], [MB_CURR, 14]]]],
+        N_B_SUB_PART: [
+            [[[MB_B, 10], [MB_NA, 0], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_B, 10], [MB_CURR, 0], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_B, 10], [MB_B, 11], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_B, 10], [MB_B, 11], [MB_CURR, 0], [MB_CURR, 1]]],
+
+            [[[MB_B, 14], [MB_NA, 0], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_B, 14], [MB_CURR, 4], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_B, 14], [MB_B, 15], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_B, 14], [MB_B, 15], [MB_CURR, 4], [MB_CURR, 5]]],
+
+            [[[MB_CURR, 2], [MB_NA, 0], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_CURR, 2], [MB_CURR, 8], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_CURR, 2], [MB_CURR, 3], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_CURR, 2], [MB_CURR, 3], [MB_CURR, 8], [MB_CURR, 9]]],
+
+            [[[MB_CURR, 6], [MB_NA, 0], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_CURR, 6], [MB_CURR, 12], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_CURR, 6], [MB_CURR, 7], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_CURR, 6], [MB_CURR, 7], [MB_CURR, 12], [MB_CURR, 13]]]],
+
+        N_C_SUB_PART: [
+            [[[MB_B, 14], [MB_NA, 0], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_B, 14], [MB_NA, 4], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_B, 11], [MB_B, 14], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_B, 11], [MB_B, 14], [MB_CURR, 1], [MB_NA, 4]]],
+
+            [[[MB_C, 10], [MB_NA, 0], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_C, 10], [MB_NA, 0], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_B, 15], [MB_C, 10], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_B, 15], [MB_C, 10], [MB_CURR, 5], [MB_NA, 0]]],
+
+            [[[MB_CURR, 6], [MB_NA, 0], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_CURR, 6], [MB_NA, 12], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_CURR, 3], [MB_CURR, 6], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_CURR, 3], [MB_CURR, 6], [MB_CURR, 9], [MB_NA, 12]]],
+
+            [[[MB_NA, 2], [MB_NA, 0], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_NA, 2], [MB_NA, 8], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_CURR, 7], [MB_NA, 2], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_CURR, 7], [MB_NA, 2], [MB_CURR, 13], [MB_NA, 8]]]],
+
+        N_D_SUB_PART: [
+            [[[MB_D, 15], [MB_NA, 0], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_D, 15], [MB_A, 5], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_D, 15], [MB_B, 10], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_D, 15], [MB_B, 10], [MB_A, 5], [MB_CURR, 0]]],
+
+            [[[MB_B, 11], [MB_NA, 0], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_B, 11], [MB_CURR, 1], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_B, 11], [MB_B, 14], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_B, 11], [MB_B, 14], [MB_CURR, 1], [MB_CURR, 4]]],
+
+            [[[MB_A, 7], [MB_NA, 0], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_A, 7], [MB_A, 13], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_A, 7], [MB_CURR, 2], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_A, 7], [MB_CURR, 2], [MB_A, 13], [MB_CURR, 8]]],
+
+            [[[MB_CURR, 3], [MB_NA, 0], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_CURR, 3], [MB_CURR, 9], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_CURR, 3], [MB_CURR, 6], [MB_NA, 0], [MB_NA, 0]],
+                [[MB_CURR, 3], [MB_CURR, 6], [MB_CURR, 9], [MB_CURR, 12]]]]
+
+
     };
 });

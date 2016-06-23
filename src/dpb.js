@@ -191,8 +191,11 @@ define([
         },
         mmcop5: function() {
             for (var i = 0; i < 16; i++) {
-                if (this.refPicList0[i].status !== _defs.UNUSED) {
-                    this.refPicList0[i].status = _defs.UNUSED;
+                for (var i = 0; i < 16; i++) {
+                    this.refPicList0[i] = {
+                        data: new Array(this.decoder.picSizeInMb * 384),
+                        status: _defs.UNUSED
+                    };
                     if (!this.refPicList0[i].toBeDisplayed)
                         this.fullness--;
                 }
@@ -273,8 +276,78 @@ define([
 
             return 1;
         },
-        sortPic: function() {
+        comparePictures: function(ptr1, ptr2) {
+            var pic1, pic2;
 
+            pic1 = ptr1;
+            pic2 = ptr2;
+
+            /* both are non-reference pictures, check if needed for display */
+            if (!pic1.status && !pic2.status)
+            {
+                if (pic1.toBeDisplayed && !pic2.toBeDisplayed)
+                    return(-1);
+                else if (!pic1.toBeDisplayed && pic2.toBeDisplayed)
+                    return(1);
+                else
+                    return(0);
+            }
+            /* only pic 1 needed for reference -> greater */
+            else if (!pic2.status)
+            return(-1);
+            /* only pic 2 needed for reference -> greater */
+            else if (!pic1.status)
+            return(1);
+            /* both are short term reference pictures -> check picNum */
+            else if ((pic1.status === _defs.NON_EXIST || pic1.status === _defs.SHORT_TERM) && (pic2.status === _defs.NON_EXIST || pic2.status === _defs.SHORT_TERM))
+            {
+                if (pic1.picNum > pic2.picNum)
+                    return(-1);
+                else if (pic1.picNum < pic2.picNum)
+                    return(1);
+                else
+                    return(0);
+            }
+            /* only pic 1 is short term -> greater */
+            else if ((pic1.status === _defs.NON_EXIST || pic1.status === _defs.SHORT_TERM))
+            return(-1);
+            /* only pic 2 is short term -> greater */
+            else if ((pic2.status === _defs.NON_EXIST || pic2.status === _defs.SHORT_TERM))
+            return(1);
+            /* both are long term reference pictures -> check picNum (contains the
+             * longTermPicNum */
+            else
+            {
+                if (pic1.picNum > pic2.picNum)
+                    return(1);
+                else if (pic1.picNum < pic2.picNum)
+                    return(-1);
+                else
+                    return(0);
+            }
+        },
+        sortPic: function() {
+            var step;
+            var tmpPic;
+            var pPic = this.refPicList0;
+
+            step = 7;
+
+            while (step)
+            {
+                for (var i = step; i < 17; i++)
+                {
+                    tmpPic = pPic[i];
+                    var j = i;
+                    while (j >= step && this.comparePictures(pPic + j - step, tmpPic) > 0)
+                    {
+                        pPic[j] = pPic[j-step];
+                        j -= step;
+                    }
+                    pPic[j] = tmpPic;
+                }
+                step >>= 1;
+            }
         },
         markDecRefPic: function(slice, isIdr, frameNum, picOrderCnt) {
             var i, status;
@@ -304,7 +377,7 @@ define([
             else if (isIdr)
             {
 
-                /* h264bsdCheckGapsInFrameNum not called for IDR pictures . have to
+                /* CheckGapsInFrameNum not called for IDR pictures . have to
                  * reset numOut and outIndex here */
                 dpb.numOut = dpb.outIndex = 0;
 
@@ -443,6 +516,7 @@ define([
             }
 
             /* sort dpb */
+            this.refPicList0[16] = this.decoder.currPic;
             this.sortPic();
 
             return(status);

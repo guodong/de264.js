@@ -49,9 +49,9 @@ define([
     
     function inverseRasterScan(a, b, c, d, e) {
         if (e === 0) {
-            return (a % (d / b)) * b;
+            return (a % Math.floor(d / b)) * b;
         } else {
-            return (a / (d / b)) * c;
+            return Math.floor(a / Math.floor(d / b)) * c;
         }
     }
     
@@ -99,6 +99,7 @@ define([
     function clip1(x) {
         return clip3(0, 255, x);
     }
+    
     
     return {
         isISlice: isISlice,
