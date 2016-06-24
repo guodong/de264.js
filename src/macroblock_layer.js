@@ -1042,12 +1042,10 @@ define([
                 }
                 this.intra_chroma_pred_mode = qb.deqUe();
             } else {
+                this.ref_idx_l0 = [0, 0, 0, 0];
                 for (var mbPartIdx = 0; mbPartIdx < this.numMbPart; mbPartIdx++) {
                     if (this.slice.num_ref_idx_l0_active_minus1 > 0) {
-                        this.ref_idx_l0 = [];
                         this.ref_idx_l0[mbPartIdx] = qb.deqTe((this.slice.num_ref_idx_l0_active_minus1 > 1));
-                    } else {
-                        this.ref_idx_l0 = [0, 0, 0, 0];
                     }
                 }
                 this.mvd_l0 = [];
@@ -1061,9 +1059,9 @@ define([
             for (var mbPartIdx = 0; mbPartIdx < 4; mbPartIdx++) {
                 this.subMbs[mbPartIdx].setSubMbType(qb.deqUe());
             }
-            this.ref_idx_l0 = [];
+            this.ref_idx_l0 = [0, 0, 0, 0];
             for (var mbPartIdx = 0; mbPartIdx < 4; mbPartIdx++) { /* SubMbPredMode(sub_mb_type[mbPartIdx]) is Prd_L0 for P slice */
-                if ((this.slice.num_ref_idx_l0_active_minus1 > 0) && mb_type !== _defs.P_8x8ref0 && this.sub_mb_type[mbPartIdx] !== _defs.B_Direct_8x8) {
+                if ((this.slice.num_ref_idx_l0_active_minus1 > 0) && mb_type !== _defs.P_8x8ref0) {
                     this.ref_idx_l0[mbPartIdx] = qb.deqTe(this.slice.num_ref_idx_l0_active_minus1 > 1);
                 }
             }
@@ -1963,21 +1961,21 @@ define([
                     // var mvL0 = this.deriveMv(mbPartIdx, subMbPartIdx);
                     this.mvPrediction16x16();
                     this.refImage.data = this.refAddr[0];
-                    this.predictSamples(this.mv[0], col, row, 0, 0, 16, 16);
+                    this.predictSamples(this.mv[0], col, row, 16, 16);
                     break;
                 case _defs.P_L0_L0_16x8:
                     this.mvPrediction16x8();
                     this.refImage.data = this.refAddr[0];
-                    this.predictSamples(this.mv[0], col, row, 0, 0, 16, 8);
+                    this.predictSamples(this.mv[0], col, row, 16, 8);
                     this.refImage.data = this.refAddr[2];
-                    this.predictSamples(this.mv[8], col, row, 0, 0, 16, 8);
+                    this.predictSamples(this.mv[8], col, row + 8, 16, 8);
                     break;
                 case _defs.P_L0_L0_8x16:
                     this.mvPrediction8x16();
                     this.refImage.data = this.refAddr[0];
-                    this.predictSamples(this.mv[0], col, row, 0, 0, 8, 16);
+                    this.predictSamples(this.mv[0], col, row, 8, 16);
                     this.refImage.data = this.refAddr[1];
-                    this.predictSamples(this.mv[4], col, row, 0, 0, 8, 16);
+                    this.predictSamples(this.mv[4], col + 8, row, 8, 16);
                     break;
                 default:
                     this.mvPrediction8x8();
@@ -1987,21 +1985,21 @@ define([
                         var y = i < 2 ? 0 : 8;
                         switch (this.subMbs[i].sub_mb_type) {
                             case _defs.P_L0_8x8:
-                                this.predictSamples(this.mv[4 * i], col, row, x, y, 8, 8);
+                                this.predictSamples(this.mv[4 * i], col + x, row + y, 8, 8);
                                 break;
                             case _defs.P_L0_8x4:
-                                this.predictSamples(this.mv[4 * i], col, row, x, y, 8, 4);
-                                this.predictSamples(this.mv[4 * i + 2], col, row, x, y + 4, 8, 4);
+                                this.predictSamples(this.mv[4 * i], col + x, row + y, 8, 4);
+                                this.predictSamples(this.mv[4 * i + 2], col + x, row + y + 4, 8, 4);
                                 break;
                             case _defs.P_L0_4x8:
-                                this.predictSamples(this.mv[4 * i], col, row, x, y, 4, 8);
-                                this.predictSamples(this.mv[4 * i + 1], col, row, x + 4, y, 4, 8);
+                                this.predictSamples(this.mv[4 * i], col + x, row + y, 4, 8);
+                                this.predictSamples(this.mv[4 * i + 1], col + x + 4, row + y, 4, 8);
                                 break;
                             default:
-                                this.predictSamples(this.mv[4 * i], col, row, x, y, 4, 4);
-                                this.predictSamples(this.mv[4 * i + 1], col, row, x + 4, y, 4, 4);
-                                this.predictSamples(this.mv[4 * i + 2], col, row, x, y + 4, 4, 4);
-                                this.predictSamples(this.mv[4 * i + 3], col, row, x + 4, y, 4, 4);
+                                this.predictSamples(this.mv[4 * i], col + x, row + y, 4, 4);
+                                this.predictSamples(this.mv[4 * i + 1], col + x + 4, row + y, 4, 4);
+                                this.predictSamples(this.mv[4 * i + 2], col + x, row + y + 4, 4, 4);
+                                this.predictSamples(this.mv[4 * i + 3], col + x + 4, row + y + 4, 4, 4);
                                 break;
                         }
                     }
@@ -2100,14 +2098,477 @@ define([
                 fill += fillScanLength;
             }
         },
-        predictSamples: function(mv, xA, yA, partX, partY, partWidth, partHeight) {
+        lumaSampleInterpolation: function(xInt, yInt, xFrac, yFrac) {
+            var lumaFracPos = [
+                /* G  d  h  n    a  e  i  p    b  f  j   q     c   g   k   r */
+                [0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]];
+            var luma = 0;
+            switch (lumaFracPos[xFrac][yFrac]) {
+                case 0:
+                    luma = this.refImage.data[xInt * this.decoder.width + yInt];
+                    break;
+                case 1:
+                    var xA = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yA = _common.clip3(0, this.decoder.height - 1, yInt - 2);
+                    var lumaA = this.refImage.data[xA * this.decoder.width + yA];
+
+                    var xC = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yC = _common.clip3(0, this.decoder.height - 1, yInt - 1);
+                    var lumaC = this.refImage.data[xC * this.decoder.width + yC];
+
+                    var xG = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yG = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaG = this.refImage.data[xG * this.decoder.width + yG];
+
+                    var xM = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yM = _common.clip3(0, this.decoder.height - 1, yInt + 1);
+                    var lumaM = this.refImage.data[xM * this.decoder.width + yM];
+
+                    var xR = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yR = _common.clip3(0, this.decoder.height - 1, yInt + 2);
+                    var lumaR = this.refImage.data[xR * this.decoder.width + yR];
+
+                    var xT = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yT = _common.clip3(0, this.decoder.height - 1, yInt + 3);
+                    var lumaT = this.refImage.data[xT * this.decoder.width + yT];
+
+                    var h1 = lumaA - 5 * lumaC + 20 * lumaG + 20 * lumaM - 5 * lumaR + lumaT;
+                    var h = _common.clip1((h1 + 16) >> 5);
+                    var d = (lumaG + h + 1) >> 1;
+                    luma = d;
+                    break;
+                case 2:
+                    var xA = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yA = _common.clip3(0, this.decoder.height - 1, yInt - 2);
+                    var lumaA = this.refImage.data[xA * this.decoder.width + yA];
+
+                    var xC = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yC = _common.clip3(0, this.decoder.height - 1, yInt - 1);
+                    var lumaC = this.refImage.data[xC * this.decoder.width + yC];
+
+                    var xG = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yG = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaG = this.refImage.data[xG * this.decoder.width + yG];
+
+                    var xM = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yM = _common.clip3(0, this.decoder.height - 1, yInt + 1);
+                    var lumaM = this.refImage.data[xM * this.decoder.width + yM];
+
+                    var xR = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yR = _common.clip3(0, this.decoder.height - 1, yInt + 2);
+                    var lumaR = this.refImage.data[xR * this.decoder.width + yR];
+
+                    var xT = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yT = _common.clip3(0, this.decoder.height - 1, yInt + 3);
+                    var lumaT = this.refImage.data[xT * this.decoder.width + yT];
+
+                    var h1 = lumaA - 5 * lumaC + 20 * lumaG + 20 * lumaM - 5 * lumaR + lumaT;
+                    var h = _common.clip1((h1 + 16) >> 5);
+                    luma = h;
+                    break;
+                case 3:
+                    var xA = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yA = _common.clip3(0, this.decoder.height - 1, yInt - 2);
+                    var lumaA = this.refImage.data[xA * this.decoder.width + yA];
+
+                    var xC = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yC = _common.clip3(0, this.decoder.height - 1, yInt - 1);
+                    var lumaC = this.refImage.data[xC * this.decoder.width + yC];
+
+                    var xG = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yG = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaG = this.refImage.data[xG * this.decoder.width + yG];
+
+                    var xM = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yM = _common.clip3(0, this.decoder.height - 1, yInt + 1);
+                    var lumaM = this.refImage.data[xM * this.decoder.width + yM];
+
+                    var xR = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yR = _common.clip3(0, this.decoder.height - 1, yInt + 2);
+                    var lumaR = this.refImage.data[xR * this.decoder.width + yR];
+
+                    var xT = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yT = _common.clip3(0, this.decoder.height - 1, yInt + 3);
+                    var lumaT = this.refImage.data[xT * this.decoder.width + yT];
+
+                    var h1 = lumaA - 5 * lumaC + 20 * lumaG + 20 * lumaM - 5 * lumaR + lumaT;
+                    var h = _common.clip1((h1 + 16) >> 5);
+                    var n = (lumaM + h + 1) >> 1;
+                    luma = n;
+                    break;
+                case 4: /* a */
+                    var xE = _common.clip3(0, this.decoder.width - 1, xInt - 2);
+                    var yE = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaE = this.refImage.data[xE * this.decoder.width + yE];
+
+                    var xF = _common.clip3(0, this.decoder.width - 1, xInt - 1);
+                    var yF = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaF = this.refImage.data[xF * this.decoder.width + yF];
+
+                    var xG = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yG = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaG = this.refImage.data[xG * this.decoder.width + yG];
+
+                    var xH = _common.clip3(0, this.decoder.width - 1, xInt + 1);
+                    var yH = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaH = this.refImage.data[xH * this.decoder.width + yH];
+
+                    var xI = _common.clip3(0, this.decoder.width - 1, xInt + 2);
+                    var yI = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaI = this.refImage.data[xI * this.decoder.width + yI];
+
+                    var xJ = _common.clip3(0, this.decoder.width - 1, xInt + 3);
+                    var yJ = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaJ = this.refImage.data[xJ * this.decoder.width + yJ];
+
+                    var b1 = lumaE - 5 * lumaF + 20 * lumaG + 20 * lumaH - 5 * lumaI + lumaJ;
+                    var b = _common.clip1((b1 + 16) >> 5);
+                    var n = (lumaG + b + 1) >> 1;
+                    luma = n;
+                    break;
+                case 5: /* e */
+                    var xE = _common.clip3(0, this.decoder.width - 1, xInt - 2);
+                    var yE = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaE = this.refImage.data[xE * this.decoder.width + yE];
+
+                    var xF = _common.clip3(0, this.decoder.width - 1, xInt - 1);
+                    var yF = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaF = this.refImage.data[xF * this.decoder.width + yF];
+
+                    var xG = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yG = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaG = this.refImage.data[xG * this.decoder.width + yG];
+
+                    var xH = _common.clip3(0, this.decoder.width - 1, xInt + 1);
+                    var yH = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaH = this.refImage.data[xH * this.decoder.width + yH];
+
+                    var xI = _common.clip3(0, this.decoder.width - 1, xInt + 2);
+                    var yI = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaI = this.refImage.data[xI * this.decoder.width + yI];
+
+                    var xJ = _common.clip3(0, this.decoder.width - 1, xInt + 3);
+                    var yJ = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaJ = this.refImage.data[xJ * this.decoder.width + yJ];
+
+                    var b1 = lumaE - 5 * lumaF + 20 * lumaG + 20 * lumaH - 5 * lumaI + lumaJ;
+                    var b = _common.clip1((b1 + 16) >> 5);
+
+                    var xA = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yA = _common.clip3(0, this.decoder.height - 1, yInt - 2);
+                    var lumaA = this.refImage.data[xA * this.decoder.width + yA];
+
+                    var xC = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yC = _common.clip3(0, this.decoder.height - 1, yInt - 1);
+                    var lumaC = this.refImage.data[xC * this.decoder.width + yC];
+
+                    var xG = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yG = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaG = this.refImage.data[xG * this.decoder.width + yG];
+
+                    var xM = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yM = _common.clip3(0, this.decoder.height - 1, yInt + 1);
+                    var lumaM = this.refImage.data[xM * this.decoder.width + yM];
+
+                    var xR = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yR = _common.clip3(0, this.decoder.height - 1, yInt + 2);
+                    var lumaR = this.refImage.data[xR * this.decoder.width + yR];
+
+                    var xT = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yT = _common.clip3(0, this.decoder.height - 1, yInt + 3);
+                    var lumaT = this.refImage.data[xT * this.decoder.width + yT];
+
+                    var h1 = lumaA - 5 * lumaC + 20 * lumaG + 20 * lumaM - 5 * lumaR + lumaT;
+                    var h = _common.clip1((h1 + 16) >> 5);
+                    var e = (b + h + 1) >> 1;
+                    luma = e;
+                    break;
+                case 6: /* i */
+                    var xA = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yA = _common.clip3(0, this.decoder.height - 1, yInt - 2);
+                    var lumaA = this.refImage.data[xA * this.decoder.width + yA];
+
+                    var xC = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yC = _common.clip3(0, this.decoder.height - 1, yInt - 1);
+                    var lumaC = this.refImage.data[xC * this.decoder.width + yC];
+
+                    var xG = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yG = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaG = this.refImage.data[xG * this.decoder.width + yG];
+
+                    var xM = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yM = _common.clip3(0, this.decoder.height - 1, yInt + 1);
+                    var lumaM = this.refImage.data[xM * this.decoder.width + yM];
+
+                    var xR = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yR = _common.clip3(0, this.decoder.height - 1, yInt + 2);
+                    var lumaR = this.refImage.data[xR * this.decoder.width + yR];
+
+                    var xT = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yT = _common.clip3(0, this.decoder.height - 1, yInt + 3);
+                    var lumaT = this.refImage.data[xT * this.decoder.width + yT];
+
+                    var h1 = lumaA - 5 * lumaC + 20 * lumaG + 20 * lumaM - 5 * lumaR + lumaT;
+                    var h = _common.clip1((h1 + 16) >> 5);
+
+                    var lumacc = this.lumaSampleInterpolation(xInt - 2, yInt, 0, 2);
+                    var lumadd = this.lumaSampleInterpolation(xInt - 1, yInt, 0, 2);
+                    var m1 = this.lumaSampleInterpolation(xInt, yInt, 0, 2);
+                    var lumaee = this.lumaSampleInterpolation(xInt + 1, yInt, 0, 2);
+                    var lumaff = this.lumaSampleInterpolation(xInt + 2, yInt, 0, 2);
+
+                    var j1 = lumacc - 5 * lumadd + 20 * h1 + 20 * m1 - 5 * lumaee + lumaff;
+                    var j = _common.clip1((j1 + 512) >> 10);
+
+                    var i = (h + j + 1) >> 1;
+                    luma = i;
+                    break;
+                case 7: /* p */
+                    var xA = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yA = _common.clip3(0, this.decoder.height - 1, yInt - 2);
+                    var lumaA = this.refImage.data[xA * this.decoder.width + yA];
+
+                    var xC = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yC = _common.clip3(0, this.decoder.height - 1, yInt - 1);
+                    var lumaC = this.refImage.data[xC * this.decoder.width + yC];
+
+                    var xG = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yG = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaG = this.refImage.data[xG * this.decoder.width + yG];
+
+                    var xM = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yM = _common.clip3(0, this.decoder.height - 1, yInt + 1);
+                    var lumaM = this.refImage.data[xM * this.decoder.width + yM];
+
+                    var xR = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yR = _common.clip3(0, this.decoder.height - 1, yInt + 2);
+                    var lumaR = this.refImage.data[xR * this.decoder.width + yR];
+
+                    var xT = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yT = _common.clip3(0, this.decoder.height - 1, yInt + 3);
+                    var lumaT = this.refImage.data[xT * this.decoder.width + yT];
+
+                    var h1 = lumaA - 5 * lumaC + 20 * lumaG + 20 * lumaM - 5 * lumaR + lumaT;
+                    var h = _common.clip1((h1 + 16) >> 5);
+
+                    var s = this.lumaSampleInterpolation(xInt, yInt + 1, 2, 0);
+
+                    var p = (h + s + 1) >> 1;
+                    luma = p;
+                    break;
+                case 8: /* b */
+                    var xE = _common.clip3(0, this.decoder.width - 1, xInt - 2);
+                    var yE = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaE = this.refImage.data[xE * this.decoder.width + yE];
+
+                    var xF = _common.clip3(0, this.decoder.width - 1, xInt - 1);
+                    var yF = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaF = this.refImage.data[xF * this.decoder.width + yF];
+
+                    var xG = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yG = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaG = this.refImage.data[xG * this.decoder.width + yG];
+
+                    var xH = _common.clip3(0, this.decoder.width - 1, xInt + 1);
+                    var yH = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaH = this.refImage.data[xH * this.decoder.width + yH];
+
+                    var xI = _common.clip3(0, this.decoder.width - 1, xInt + 2);
+                    var yI = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaI = this.refImage.data[xI * this.decoder.width + yI];
+
+                    var xJ = _common.clip3(0, this.decoder.width - 1, xInt + 3);
+                    var yJ = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaJ = this.refImage.data[xJ * this.decoder.width + yJ];
+
+                    var b1 = lumaE - 5 * lumaF + 20 * lumaG + 20 * lumaH - 5 * lumaI + lumaJ;
+                    var b = _common.clip1((b1 + 16) >> 5);
+                    luma = b;
+                    break;
+                case 9: /* f */
+                    var xE = _common.clip3(0, this.decoder.width - 1, xInt - 2);
+                    var yE = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaE = this.refImage.data[xE * this.decoder.width + yE];
+
+                    var xF = _common.clip3(0, this.decoder.width - 1, xInt - 1);
+                    var yF = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaF = this.refImage.data[xF * this.decoder.width + yF];
+
+                    var xG = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yG = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaG = this.refImage.data[xG * this.decoder.width + yG];
+
+                    var xH = _common.clip3(0, this.decoder.width - 1, xInt + 1);
+                    var yH = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaH = this.refImage.data[xH * this.decoder.width + yH];
+
+                    var xI = _common.clip3(0, this.decoder.width - 1, xInt + 2);
+                    var yI = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaI = this.refImage.data[xI * this.decoder.width + yI];
+
+                    var xJ = _common.clip3(0, this.decoder.width - 1, xInt + 3);
+                    var yJ = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaJ = this.refImage.data[xJ * this.decoder.width + yJ];
+
+                    var b1 = lumaE - 5 * lumaF + 20 * lumaG + 20 * lumaH - 5 * lumaI + lumaJ;
+                    var b = _common.clip1((b1 + 16) >> 5);
+
+                    var lumacc = this.lumaSampleInterpolation(xInt - 2, yInt, 0, 2);
+                    var lumadd = this.lumaSampleInterpolation(xInt - 1, yInt, 0, 2);
+                    var m1 = this.lumaSampleInterpolation(xInt, yInt, 0, 2);
+                    var lumaee = this.lumaSampleInterpolation(xInt + 1, yInt, 0, 2);
+                    var lumaff = this.lumaSampleInterpolation(xInt + 2, yInt, 0, 2);
+
+                    var j1 = lumacc - 5 * lumadd + 20 * h1 + 20 * m1 - 5 * lumaee + lumaff;
+                    var j = _common.clip1((j1 + 512) >> 10);
+
+                    var f = (b + j + 1) >> 1;
+                    luma = f;
+                    break;
+                case 10: /* j */
+                    var lumacc = this.lumaSampleInterpolation(xInt - 2, yInt, 0, 2);
+                    var lumadd = this.lumaSampleInterpolation(xInt - 1, yInt, 0, 2);
+                    var m1 = this.lumaSampleInterpolation(xInt, yInt, 0, 2);
+                    var lumaee = this.lumaSampleInterpolation(xInt + 1, yInt, 0, 2);
+                    var lumaff = this.lumaSampleInterpolation(xInt + 2, yInt, 0, 2);
+
+                    var j1 = lumacc - 5 * lumadd + 20 * h1 + 20 * m1 - 5 * lumaee + lumaff;
+                    var j = _common.clip1((j1 + 512) >> 10);
+
+                    luma = j;
+                    break;
+                case 11: /* q */
+                    var xE = _common.clip3(0, this.decoder.width - 1, xInt - 2);
+                    var yE = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaE = this.refImage.data[xE * this.decoder.width + yE];
+
+                    var xF = _common.clip3(0, this.decoder.width - 1, xInt - 1);
+                    var yF = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaF = this.refImage.data[xF * this.decoder.width + yF];
+
+                    var xG = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yG = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaG = this.refImage.data[xG * this.decoder.width + yG];
+
+                    var xH = _common.clip3(0, this.decoder.width - 1, xInt + 1);
+                    var yH = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaH = this.refImage.data[xH * this.decoder.width + yH];
+
+                    var xI = _common.clip3(0, this.decoder.width - 1, xInt + 2);
+                    var yI = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaI = this.refImage.data[xI * this.decoder.width + yI];
+
+                    var xJ = _common.clip3(0, this.decoder.width - 1, xInt + 3);
+                    var yJ = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaJ = this.refImage.data[xJ * this.decoder.width + yJ];
+
+                    var b1 = lumaE - 5 * lumaF + 20 * lumaG + 20 * lumaH - 5 * lumaI + lumaJ;
+                    var b = _common.clip1((b1 + 16) >> 5);
+
+                    var lumacc = this.lumaSampleInterpolation(xInt - 2, yInt, 0, 2);
+                    var lumadd = this.lumaSampleInterpolation(xInt - 1, yInt, 0, 2);
+                    var m1 = this.lumaSampleInterpolation(xInt, yInt, 0, 2);
+                    var lumaee = this.lumaSampleInterpolation(xInt + 1, yInt, 0, 2);
+                    var lumaff = this.lumaSampleInterpolation(xInt + 2, yInt, 0, 2);
+
+                    var j1 = lumacc - 5 * lumadd + 20 * h1 + 20 * m1 - 5 * lumaee + lumaff;
+                    var j = _common.clip1((j1 + 512) >> 10);
+
+                    var s = this.lumaSampleInterpolation(xInt, yInt + 1, 2, 0);
+                    var q = (j + s + 1) >> 1;
+                    luma = q;
+                    break;
+                case 12: /* c */
+                    var xE = _common.clip3(0, this.decoder.width - 1, xInt - 2);
+                    var yE = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaE = this.refImage.data[xE * this.decoder.width + yE];
+
+                    var xF = _common.clip3(0, this.decoder.width - 1, xInt - 1);
+                    var yF = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaF = this.refImage.data[xF * this.decoder.width + yF];
+
+                    var xG = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yG = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaG = this.refImage.data[xG * this.decoder.width + yG];
+
+                    var xH = _common.clip3(0, this.decoder.width - 1, xInt + 1);
+                    var yH = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaH = this.refImage.data[xH * this.decoder.width + yH];
+
+                    var xI = _common.clip3(0, this.decoder.width - 1, xInt + 2);
+                    var yI = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaI = this.refImage.data[xI * this.decoder.width + yI];
+
+                    var xJ = _common.clip3(0, this.decoder.width - 1, xInt + 3);
+                    var yJ = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaJ = this.refImage.data[xJ * this.decoder.width + yJ];
+
+                    var b1 = lumaE - 5 * lumaF + 20 * lumaG + 20 * lumaH - 5 * lumaI + lumaJ;
+                    var b = _common.clip1((b1 + 16) >> 5);
+
+                    var c = (lumaH + b + 1) >> 1;
+                    luma = c;
+                    break;
+                case 13: /* g */
+                    var xE = _common.clip3(0, this.decoder.width - 1, xInt - 2);
+                    var yE = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaE = this.refImage.data[xE * this.decoder.width + yE];
+
+                    var xF = _common.clip3(0, this.decoder.width - 1, xInt - 1);
+                    var yF = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaF = this.refImage.data[xF * this.decoder.width + yF];
+
+                    var xG = _common.clip3(0, this.decoder.width - 1, xInt);
+                    var yG = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaG = this.refImage.data[xG * this.decoder.width + yG];
+
+                    var xH = _common.clip3(0, this.decoder.width - 1, xInt + 1);
+                    var yH = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaH = this.refImage.data[xH * this.decoder.width + yH];
+
+                    var xI = _common.clip3(0, this.decoder.width - 1, xInt + 2);
+                    var yI = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaI = this.refImage.data[xI * this.decoder.width + yI];
+
+                    var xJ = _common.clip3(0, this.decoder.width - 1, xInt + 3);
+                    var yJ = _common.clip3(0, this.decoder.height - 1, yInt);
+                    var lumaJ = this.refImage.data[xJ * this.decoder.width + yJ];
+
+                    var b1 = lumaE - 5 * lumaF + 20 * lumaG + 20 * lumaH - 5 * lumaI + lumaJ;
+                    var b = _common.clip1((b1 + 16) >> 5);
+
+                    var m = this.lumaSampleInterpolation(xInt + 1, yInt, 0, 2);
+                    var g = (b + m + 1) >> 1;
+                    luma = g;
+                    break;
+                case 14: /* k */
+                    var lumacc = this.lumaSampleInterpolation(xInt - 2, yInt, 0, 2);
+                    var lumadd = this.lumaSampleInterpolation(xInt - 1, yInt, 0, 2);
+                    var m1 = this.lumaSampleInterpolation(xInt, yInt, 0, 2);
+                    var lumaee = this.lumaSampleInterpolation(xInt + 1, yInt, 0, 2);
+                    var lumaff = this.lumaSampleInterpolation(xInt + 2, yInt, 0, 2);
+
+                    var j1 = lumacc - 5 * lumadd + 20 * h1 + 20 * m1 - 5 * lumaee + lumaff;
+                    var j = _common.clip1((j1 + 512) >> 10);
+
+                    var m = this.lumaSampleInterpolation(xInt + 1, yInt, 0, 2);
+                    var k = (j + m + 1) >> 1;
+                    luma = k;
+                    break;
+                case 15: /* r */
+                    var m = this.lumaSampleInterpolation(xInt + 1, yInt, 0, 2);
+                    var s = this.lumaSampleInterpolation(xInt, yInt + 1, 2, 0);
+                    var r = (m + s + 1) >> 1;
+                    luma = r;
+                    break;
+            }
+            return luma;
+        },
+        predictSamples: function(mv, xA, yA, partWidth, partHeight) {
             var xFrac, yFrac, width, height;
             var xInt, yInt;
             var lumaPartData;
             var refPic = this.refImage;
-            var lumaFracPos = [
-                /* G  d  h  n    a  e  i  p    b  f  j   q     c   g   k   r */
-                [0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]];
 
 
             /* luma */
@@ -2116,11 +2577,16 @@ define([
             xFrac = mv.hor & 0x3;
             yFrac = mv.ver & 0x3;
 
-            width = this.decoder.width;
-            height = this.decoder.height;
-
-            xInt = xA + partX + (mv.hor >> 2);
-            yInt = yA + partY + (mv.ver >> 2);
+            var predPartL0 = [];
+            for (var i = 0; i < partHeight; i++) {
+                predPartL0[i] = [];
+                for (var j = 0; j < partWidth; j++) {
+                    var pixInRef = {x: xInt + i * partWidth + j, y: yInt + i};
+                    var xInt = xA + (mv.hor >> 2) + j;
+                    var yInt = yA + (mv.ver >> 2) + i;
+                    var luma = this.lumaSampleInterpolation(xInt, yInt, xFrac, yFrac);
+                }
+            }
 
             // switch (lumaFracPos[xFrac][yFrac]) {
             //     case 0: /* G */
@@ -2447,6 +2913,7 @@ define([
         mvPrediction8x8: function() {
             for (var i = 0; i < 4; i++) {
                 this.refPic[i] = this.ref_idx_l0[i];
+                console.log(this.ref_idx_l0);
                 this.refAddr[i] = this.decoder.dpb.refPicList0[this.refPic[i]].data;
                 for (var j = 0; j < this.subMbs.numSubMbPart; j++) {
                     this.mvPrediction(i, j);
