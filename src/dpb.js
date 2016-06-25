@@ -501,10 +501,10 @@ define([
              * picture immediately */
             if (dpb.noReordering)
             {
-                dpb.outBuf[dpb.numOut].data  = dpb.currentOut.data;
-                dpb.outBuf[dpb.numOut].isIdr = dpb.currentOut.isIdr;
-                dpb.outBuf[dpb.numOut].picId = dpb.currentOut.picId;
-                dpb.numOut++;
+                // dpb.outBuf[dpb.numOut].data  = dpb.currentOut.data;
+                // dpb.outBuf[dpb.numOut].isIdr = dpb.currentOut.isIdr;
+                // dpb.outBuf[dpb.numOut].picId = dpb.currentOut.picId;
+                // dpb.numOut++;
             }
             else
             {

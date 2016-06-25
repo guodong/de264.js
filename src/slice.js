@@ -467,7 +467,6 @@ define([
                             mb.mbPartWidth = 16;
                             mb.mbPartHeight = 16;
                             mb.decode();
-
                             CurrMbAddr = NextMbAddress(CurrMbAddr);
                         }
                         moreDataFlag = qb.more_rbsp_data();

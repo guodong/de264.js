@@ -132,13 +132,12 @@ define([
             return nal;
         },
         writeCurrPic: function() {
-            for (var i in this.mbs) {
-                for (var j = 0; j < 16; j++) {
-                    var luma4x4 = this.mbs[i].decoded.lumas[j];
-                    for (var x = 0; x < 4; x++) {
-                        for (var y = 0; y < 4; y++) {
-                            this.currPic.data[this.widthInMb * 16 * (Math.floor(i / this.widthInMb) * 16 + 4 * (_defs.map4x4to16x16[j] >> 2) + x) + 16 * (i % this.widthInMb) + 4 * (_defs.map4x4to16x16[j] % 4) + y] = luma4x4[x][y];
-                        }
+            for (var mbIdx in this.mbs) {
+                var y = Math.floor(mbIdx / this.widthInMb) << 4;
+                var x = (mbIdx % this.widthInMb) << 4;
+                for (var i = 0; i < 16; i++) {
+                    for (var j = 0; j < 16; j++) {
+                        this.currPic.data[(y + i) * this.width + x + j] = this.mbs[mbIdx].luma[i][j];
                     }
                 }
             }

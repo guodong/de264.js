@@ -46,7 +46,16 @@ define([
             return v[m][2];
         }
     }
-    
+
+    /**
+     * inverse scan macroblock
+     * @param a mbPartIdx
+     * @param b mbPartWidth
+     * @param c mbPartHeight
+     * @param d mbSampleHeight
+     * @param e 0 for x, 1 for y
+     * @returns {number}
+     */
     function inverseRasterScan(a, b, c, d, e) {
         if (e === 0) {
             return (a % Math.floor(d / b)) * b;
