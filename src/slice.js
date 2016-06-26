@@ -461,6 +461,23 @@ define([
                             for (var j = 0; j < mb.rem_intra4x4_pred_mode.length; j++) {
                                 mb.rem_intra4x4_pred_mode[j] = 0;
                             }
+                            for (var j in mb.LumaLevel) {
+                                for (var k in mb.LumaLevel[j]) {
+                                    mb.LumaLevel[j][k] = 0;
+                                }
+                            }
+                            for (var j in mb.ChromaDCLevel) {
+                                for (var k in mb.ChromaDCLevel[j]) {
+                                    mb.ChromaDCLevel[j][k] = 0;
+                                }
+                            }
+                            for (var j in mb.ChromaACLevel) {
+                                for (var k in mb.ChromaACLevel[j]) {
+                                    for (var m in mb.ChromaACLevel[j][k]) {
+                                        mb.ChromaDCLevel[j][k][m] = 0;
+                                    }
+                                }
+                            }
                             mb.numMbPart = 1;
                             mb.numSubMbPart = 1;
                             mb.sub_mb_type[0] = _defs.NA;

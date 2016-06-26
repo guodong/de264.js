@@ -109,6 +109,14 @@ define([
         return clip3(0, 255, x);
     }
     
+    function inverseScanTransformCoeff(list) {
+        return [
+            [list[0], list[1], list[5], list[6]],
+            [list[2], list[4], list[7], list[12]],
+            [list[3], list[8], list[11], list[13]],
+            [list[9], list[10], list[14], list[15]]
+        ];
+    }
     
     return {
         isISlice: isISlice,
@@ -122,6 +130,7 @@ define([
         inverseRasterScan: inverseRasterScan,
         clip3: clip3,
         clip1: clip1,
-        medianFilter: medianFilter
+        medianFilter: medianFilter,
+        inverseScanTransformCoeff: inverseScanTransformCoeff
     };
 });

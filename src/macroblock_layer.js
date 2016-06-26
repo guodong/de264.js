@@ -818,7 +818,7 @@ define([
             }
         }
 
-        var ChromaDCLevel = [];
+        var ChromaDCLevel = this.ChromaDCLevel;
         var idx = 25;
         for (var iCbCr = 0; iCbCr < 2; iCbCr++) {
             ChromaDCLevel[iCbCr] = [];
@@ -833,7 +833,7 @@ define([
             idx++;
         }
 
-        var ChromaACLevel = [];
+        var ChromaACLevel = this.ChromaACLevel;
         var idx = 16;
         for (var iCbCr = 0; iCbCr < 2; iCbCr++) {
             ChromaACLevel[iCbCr] = [];
@@ -898,6 +898,8 @@ define([
         for (var i = 0; i < 23; i++) {
             this.totalCoeff[i] = 0;
         }
+        this.ChromaDCLevel = [];
+        this.ChromaACLevel = [];
 
         this.luma4x4 = [];
         this.luma4x4PredMode = [];
@@ -917,12 +919,6 @@ define([
                     cr: 128
                 };
             }
-        }
-        this.cb = [];
-        this.cr = [];
-        for (var i = 0; i < 8; i++) {
-            this.cb[i] = [];
-            this.cr[i] = [];
         }
 
         this.decoded = {
@@ -1240,6 +1236,26 @@ define([
                 yW: yW
             };
         },
+        writeBlockToChroma: function(data, blockIndex, cr) {
+            var x = 0, y = 0;
+            if (blockIndex === 1) {
+                x = 4;
+            } else if (blockIndex === 2) {
+                y = 4;
+            } else if (blockIndex === 3) {
+                x = 4;
+                y = 4;
+            }
+            for (var i = 0; i < 4; i++) {
+                for (var j = 0; j < 4; j++) {
+                    if (cr) {
+                        this.chroma[x + j][y + i].cr = data[i][j];
+                    } else {
+                        this.chroma[x + j][y + i].cb = data[i][j];
+                    }
+                }
+            }
+        },
         intraChromaPredict: function() {
             var p = [];
             var x = -1;
@@ -1250,8 +1266,8 @@ define([
                     p[x][y] = null;
                 } else {
                     p[x][y] = {
-                        cb: result.neighbour.cb[result.yW][result.xW],
-                        cr: result.neighbour.cr[result.yW][result.xW]
+                        cb: result.neighbour.chroma[result.yW][result.xW].cb,
+                        cr: result.neighbour.chroma[result.yW][result.xW].cr
                     };
                 }
             }
@@ -1263,8 +1279,8 @@ define([
                     p[x][y] = null;
                 } else {
                     p[x][y] = {
-                        cb: result.neighbour.cb[result.yW][result.xW],
-                        cr: result.neighbour.cr[result.yW][result.xW]
+                        cb: result.neighbour.chroma[result.yW][result.xW].cb,
+                        cr: result.neighbour.chroma[result.yW][result.xW].cr
                     };
                 }
             }
@@ -1432,6 +1448,168 @@ define([
                     }
                     break;
             }
+            /* below is residual */
+            if (this.hasResidual) {
+                var c = [
+                    [this.ChromaDCLevel[0][0], this.ChromaDCLevel[0][1]],
+                    [this.ChromaDCLevel[0][2], this.ChromaDCLevel[0][3]]
+                ];
+                var f = _util.matrix.multiply(_util.matrix.multiply([[1, 1], [1, -1]], c), [[1, 1], [1, -1]]);
+                var qPI = _common.clip3(0, 51, this.qpY + this.decoder.pps.chroma_qp_index_offset);
+                var QPC = qPI < 30 ? qPI : _defs.QPC_MAP[qPI - 30];
+                var dcC = [];
+                if (QPC >= 6) {
+                    for (var i = 0; i < 2; i++) {
+                        dcC[i] = [];
+                        for (var j = 0; j < 2; j++) {
+                            dcC[i][j] = (f[i][j] * _common.LevelScale(QPC % 6, 0, 0)) << (Math.floor(QPC / 6) - 1);
+                        }
+                    }
+                } else {
+                    for (var i = 0; i < 2; i++) {
+                        dcC[i] = [];
+                        for (var j = 0; j < 2; j++) {
+                            dcC[i][j] = (f[i][j] * _common.LevelScale(QPC % 6, 0, 0)) >> 1;
+                        }
+                    }
+                }
+                for (var chroma4x4BlkIdx = 0; chroma4x4BlkIdx < 4; chroma4x4BlkIdx++) {
+                    var chromaList = [dcC[chroma4x4BlkIdx >> 1][chroma4x4BlkIdx % 2]];
+                    /* cb start */
+                    for (var i = 1; i < 16; i++) {
+                        chromaList[i] = this.ChromaACLevel[0][chroma4x4BlkIdx][i - 1];
+                    }
+                    c = _common.inverseScanTransformCoeff(chromaList);
+                    var qP = QPC;
+
+                    var d = [
+                        [0, 0, 0, 0],
+                        [0, 0, 0, 0],
+                        [0, 0, 0, 0],
+                        [0, 0, 0, 0]
+                    ];
+                    for (var i = 0; i < 4; i++) {
+                        for (var j = 0; j < 4; j++) {
+                            d[i][j] = (c[i][j] * _common.LevelScale(qP % 6, i, j)) << Math.floor(qP / 6);
+                        }
+                    }
+                    d[0][0] = c[0][0];
+
+                    var e = [
+                        [d[0][0] + d[0][2], d[0][0] - d[0][2], (d[0][1] >> 1) - d[0][3], d[0][1] + (d[0][3] >> 1)],
+                        [d[1][0] + d[1][2], d[1][0] - d[1][2], (d[1][1] >> 1) - d[1][3], d[1][1] + (d[1][3] >> 1)],
+                        [d[2][0] + d[2][2], d[2][0] - d[2][2], (d[2][1] >> 1) - d[2][3], d[2][1] + (d[2][3] >> 1)],
+                        [d[3][0] + d[3][2], d[3][0] - d[3][2], (d[3][1] >> 1) - d[3][3], d[3][1] + (d[3][3] >> 1)],
+                    ];
+
+                    var f = [
+                        [e[0][0] + e[0][3], e[0][1] + e[0][2], e[0][1] - e[0][2], e[0][0] - e[0][3]],
+                        [e[1][0] + e[1][3], e[1][1] + e[1][2], e[1][1] - e[1][2], e[1][0] - e[1][3]],
+                        [e[2][0] + e[2][3], e[2][1] + e[2][2], e[2][1] - e[2][2], e[2][0] - e[2][3]],
+                        [e[3][0] + e[3][3], e[3][1] + e[3][2], e[3][1] - e[3][2], e[3][0] - e[3][3]],
+                    ];
+
+                    var g = [
+                        [f[0][0] + f[2][0], f[0][1] + f[2][1], f[0][2] + f[2][2], f[0][3] + f[2][3]],
+                        [f[0][0] - f[2][0], f[0][1] - f[2][1], f[0][2] - f[2][2], f[0][3] - f[2][3]],
+                        [(f[1][0] >> 1) - f[3][0], (f[1][1] >> 1) - f[3][1], (f[1][2] >> 1) - f[3][2], (f[1][3] >> 1) - f[3][3]],
+                        [f[1][0] + (f[3][0] >> 1), f[1][1] + (f[3][1] >> 1), f[1][2] + (f[3][2] >> 1), f[1][3] + (f[3][3] >> 1)]
+                    ];
+
+                    var h = [
+                        [g[0][0] + g[3][0], g[0][1] + g[3][1], g[0][2] + g[3][2], g[0][3] + g[3][3]],
+                        [g[1][0] + g[2][0], g[1][1] + g[2][1], g[1][2] + g[2][2], g[1][3] + g[2][3]],
+                        [g[1][0] - g[2][0], g[1][1] - g[2][1], g[1][2] - g[2][2], g[1][3] - g[2][3]],
+                        [g[0][0] - g[3][0], g[0][1] - g[3][1], g[0][2] - g[3][2], g[0][3] - g[3][3]],
+                    ];
+
+                    var r = [[], [], [], []];
+                    for (var i = 0; i < 4; i++) {
+                        for (var j = 0; j < 4; j++) {
+                            r[i][j] = (h[i][j] + 32) >> 6;
+                        }
+                    }
+
+                    var xO = _common.inverseRasterScan(chroma4x4BlkIdx, 4, 4, 8, 0);
+                    var yO = _common.inverseRasterScan(chroma4x4BlkIdx, 4, 4, 8, 1);
+                    var u = [];
+                    for (var i = 0; i < 4; i++) {
+                        u[i] = [];
+                        for (var j = 0; j < 4; j++) {
+                            u[i][j] = _common.clip1(this.chroma[xO + j][yO + i].cb + r[i][j]);
+                        }
+                    }
+
+                    this.writeBlockToChroma(u, chroma4x4BlkIdx, 0);
+                    /* cb end */
+                    /* cr start */
+                    for (var i = 1; i < 16; i++) {
+                        chromaList[i] = this.ChromaACLevel[1][chroma4x4BlkIdx][i - 1];
+                    }
+                    c = _common.inverseScanTransformCoeff(chromaList);
+                    var qP = QPC;
+
+                    var d = [
+                        [0, 0, 0, 0],
+                        [0, 0, 0, 0],
+                        [0, 0, 0, 0],
+                        [0, 0, 0, 0]
+                    ];
+                    for (var i = 0; i < 4; i++) {
+                        for (var j = 0; j < 4; j++) {
+                            d[i][j] = (c[i][j] * _common.LevelScale(qP % 6, i, j)) << Math.floor(qP / 6);
+                        }
+                    }
+                    d[0][0] = c[0][0];
+
+                    var e = [
+                        [d[0][0] + d[0][2], d[0][0] - d[0][2], (d[0][1] >> 1) - d[0][3], d[0][1] + (d[0][3] >> 1)],
+                        [d[1][0] + d[1][2], d[1][0] - d[1][2], (d[1][1] >> 1) - d[1][3], d[1][1] + (d[1][3] >> 1)],
+                        [d[2][0] + d[2][2], d[2][0] - d[2][2], (d[2][1] >> 1) - d[2][3], d[2][1] + (d[2][3] >> 1)],
+                        [d[3][0] + d[3][2], d[3][0] - d[3][2], (d[3][1] >> 1) - d[3][3], d[3][1] + (d[3][3] >> 1)],
+                    ];
+
+                    var f = [
+                        [e[0][0] + e[0][3], e[0][1] + e[0][2], e[0][1] - e[0][2], e[0][0] - e[0][3]],
+                        [e[1][0] + e[1][3], e[1][1] + e[1][2], e[1][1] - e[1][2], e[1][0] - e[1][3]],
+                        [e[2][0] + e[2][3], e[2][1] + e[2][2], e[2][1] - e[2][2], e[2][0] - e[2][3]],
+                        [e[3][0] + e[3][3], e[3][1] + e[3][2], e[3][1] - e[3][2], e[3][0] - e[3][3]],
+                    ];
+
+                    var g = [
+                        [f[0][0] + f[2][0], f[0][1] + f[2][1], f[0][2] + f[2][2], f[0][3] + f[2][3]],
+                        [f[0][0] - f[2][0], f[0][1] - f[2][1], f[0][2] - f[2][2], f[0][3] - f[2][3]],
+                        [(f[1][0] >> 1) - f[3][0], (f[1][1] >> 1) - f[3][1], (f[1][2] >> 1) - f[3][2], (f[1][3] >> 1) - f[3][3]],
+                        [f[1][0] + (f[3][0] >> 1), f[1][1] + (f[3][1] >> 1), f[1][2] + (f[3][2] >> 1), f[1][3] + (f[3][3] >> 1)]
+                    ];
+
+                    var h = [
+                        [g[0][0] + g[3][0], g[0][1] + g[3][1], g[0][2] + g[3][2], g[0][3] + g[3][3]],
+                        [g[1][0] + g[2][0], g[1][1] + g[2][1], g[1][2] + g[2][2], g[1][3] + g[2][3]],
+                        [g[1][0] - g[2][0], g[1][1] - g[2][1], g[1][2] - g[2][2], g[1][3] - g[2][3]],
+                        [g[0][0] - g[3][0], g[0][1] - g[3][1], g[0][2] - g[3][2], g[0][3] - g[3][3]],
+                    ];
+
+                    var r = [[], [], [], []];
+                    for (var i = 0; i < 4; i++) {
+                        for (var j = 0; j < 4; j++) {
+                            r[i][j] = (h[i][j] + 32) >> 6;
+                        }
+                    }
+
+                    var xO = _common.inverseRasterScan(chroma4x4BlkIdx, 4, 4, 8, 0);
+                    var yO = _common.inverseRasterScan(chroma4x4BlkIdx, 4, 4, 8, 1);
+                    var u = [];
+                    for (var i = 0; i < 4; i++) {
+                        u[i] = [];
+                        for (var j = 0; j < 4; j++) {
+                            u[i][j] = _common.clip1(this.chroma[xO + j][yO + i].cr + r[i][j]);
+                        }
+                    }
+                    this.writeBlockToChroma(u, chroma4x4BlkIdx, 1);
+                }
+            }
+
         },
         decode: function() {
             if (this.type === _defs.I_MB) {

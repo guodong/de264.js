@@ -232,7 +232,8 @@ define(function() {
             [[[MB_CURR, 3], [MB_NA, 0], [MB_NA, 0], [MB_NA, 0]],
                 [[MB_CURR, 3], [MB_CURR, 9], [MB_NA, 0], [MB_NA, 0]],
                 [[MB_CURR, 3], [MB_CURR, 6], [MB_NA, 0], [MB_NA, 0]],
-                [[MB_CURR, 3], [MB_CURR, 6], [MB_CURR, 9], [MB_CURR, 12]]]]
+                [[MB_CURR, 3], [MB_CURR, 6], [MB_CURR, 9], [MB_CURR, 12]]]],
+        QPC_MAP: [29, 30, 31, 32, 32, 33, 34, 34, 35, 35, 36, 36, 37, 37, 37, 38, 38, 38, 39, 39, 39, 39]
 
 
     };

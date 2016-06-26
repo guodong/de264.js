@@ -139,6 +139,14 @@ define([
                         this.currPic.data[(y + i) * this.width + x + j] = this.mbs[mbIdx].luma[i][j];
                     }
                 }
+                var y = Math.floor(mbIdx / this.widthInMb) << 3;
+                var x = (mbIdx % this.widthInMb) << 3;
+                for (var i = 0; i < 8; i++) {
+                    for (var j = 0; j < 8; j++) {
+                        this.currPic.data[this.picSize + (y + i) * this.width/2 + x + j] = this.mbs[mbIdx].chroma[j][i].cb;
+                        this.currPic.data[this.picSize + this.picSize / 2 + (y + i) * this.width/2 + x + j] = this.mbs[mbIdx].chroma[j][i].cr;
+                    }
+                }
             }
         },
         initMbs: function() {
@@ -210,6 +218,7 @@ define([
                     this.width = this.widthInMb << 4;
                     this.height = this.heightInMb << 4;
                     this.picSizeInMb = this.widthInMb * this.heightInMb;
+                    this.picSize = this.picSizeInMb << 8;
                     this.resetCurrPic();
                     this.initMbs();
                     this.initDpb();
