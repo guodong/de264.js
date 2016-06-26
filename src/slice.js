@@ -396,7 +396,7 @@ define([
 
                 this.slice_group_change_cycle = qb.deqBits(j);
             }
-            console.log('header', this.qb.bitindex, this);
+
             /* slice_header() end*/
             this.decoder.dpb.initRefPicList();
             if (this.ref_pic_list_reordering_flag_l0) {
@@ -496,29 +496,7 @@ define([
                     mb.parse(this.qb);
 
                     mb.decode();
-                    //console.log(CurrMbAddr, mb.mb_type, this.qb.bitindex, mb);
 
-                    // var pw = this.decoder.sps.pic_width_in_mbs_minus1 + 1;
-                    // var ph = this.decoder.sps.pic_height_in_map_units_minus1 + 1;
-                    // if (mb.mbaddr === (pw * ph - 1)) {
-                    //     this.decoder.resetCurrImage();
-                    //     var yuv = new Array(pw * ph * 16 * 16 * 3 / 2);
-                    //     for (var i = 0; i < yuv.length; i++){
-                    //         yuv[i] = 128;
-                    //     }
-                    //     for (var i = 0; i < pw * ph; i++) {
-                    //         for (var j = 0; j < 16; j++) {
-                    //             var luma4x4 = this.decoder.mbs[i].decoded.lumas[j];
-                    //             for (var x = 0; x < 4; x++) {
-                    //                 for (var y = 0; y < 4; y++) {
-                    //                     yuv[pw * 16 * (Math.floor(i / pw) * 16 + 4 * (_defs.map4x4to16x16[j] >> 2) + x) + 16 * (i % pw) + 4 * (_defs.map4x4to16x16[j] % 4) + y] = luma4x4[x][y];
-                    //                 }
-                    //             }
-                    //         }
-                    //
-                    //     }
-                    //     yuv2canvas(yuv, pw * 16, ph * 16, can);
-                    // }
                     /* macroblock_layer() end */
                 }
                 moreDataFlag = qb.more_rbsp_data();

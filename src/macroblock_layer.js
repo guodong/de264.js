@@ -904,10 +904,25 @@ define([
         this.intra4x4PredMode = [];
 
         /* 16 * 16 * 3 / 2 = 384 */
-        this.yuv = new Array(384);
         this.luma = [];
         for (var i = 0; i < 16; i++) {
-            this.luma[i] = [0, 0, 0, 0];
+            this.luma[i] = [];
+        }
+        this.chroma = [];
+        for (var i = 0; i < 8; i++) {
+            this.chroma[i] = [];
+            for (var j = 0; j < 8; j++) {
+                this.chroma[i][j] = {
+                    cb: 128,
+                    cr: 128
+                };
+            }
+        }
+        this.cb = [];
+        this.cr = [];
+        for (var i = 0; i < 8; i++) {
+            this.cb[i] = [];
+            this.cr[i] = [];
         }
 
         this.decoded = {
@@ -1079,6 +1094,9 @@ define([
             }
         },
         getMbPartPredMode: function() {
+            if (this.type === _defs.P_MB) {
+                return _defs.Pred_L0;
+            }
             return (this.mb_type === 0) ? _defs.Intra_4x4 : _defs.Intra_16x16;
         },
         getIntra16x16PredMode: function() {
@@ -1195,6 +1213,224 @@ define([
                 for (var j = 0; j < 4; j++) {
                     this.luma[y + i][x + j] = data[i][j];
                 }
+            }
+        },
+        deriveNeighbouringLocations: function(xN, yN, forLuma) {
+            var maxWH = forLuma ? 16 : 8;
+            var neighbour = null;
+            if (xN < 0 && yN < 0) {
+                neighbour = this.mbD;
+            } else if (xN < 0 && (yN >= 0 && yN <= maxWH - 1)) {
+                neighbour = this.mbA;
+            } else if ((xN >= 0 && xN <= maxWH - 1) && yN < 0) {
+                neighbour = this.mbB;
+            } else if ((xN >= 0 && xN <= maxWH - 1) && (yN >= 0 && yN <= maxWH - 1)) {
+                neighbour = this;
+            } else if (xN > maxWH - 1 && yN < 0) {
+                neighbour = this.mbC;
+            } else {
+                neighbour = null;
+            }
+            var xW = (xN + maxWH) % maxWH;
+            var yW = (yN + maxWH) % maxWH;
+
+            return {
+                neighbour: neighbour,
+                xW: xW,
+                yW: yW
+            };
+        },
+        intraChromaPredict: function() {
+            var p = [];
+            var x = -1;
+            p[x] = [];
+            for (var y = -1; y < 8; y++) {
+                var result = this.deriveNeighbouringLocations(x, y, false);
+                if (result.neighbour === null || (result.neighbour.type === _defs.P_MB && this.constrained_intra_pred_flag === 1)) {
+                    p[x][y] = null;
+                } else {
+                    p[x][y] = {
+                        cb: result.neighbour.cb[result.yW][result.xW],
+                        cr: result.neighbour.cr[result.yW][result.xW]
+                    };
+                }
+            }
+            var y = -1;
+            for (var x = 0; x < 8; x++) {
+                p[x] = [];
+                var result = this.deriveNeighbouringLocations(x, y, false);
+                if (result.neighbour === null || (result.neighbour.type === _defs.P_MB && this.constrained_intra_pred_flag === 1)) {
+                    p[x][y] = null;
+                } else {
+                    p[x][y] = {
+                        cb: result.neighbour.cb[result.yW][result.xW],
+                        cr: result.neighbour.cr[result.yW][result.xW]
+                    };
+                }
+            }
+
+            var predC = this.chroma;
+
+            switch (this.intra_chroma_pred_mode) {
+                case _defs.INTRA_CHROMA_PRED_MODE_DC:
+                    if (p[0][-1] && p[1][-1] && p[2][-1] && p[3][-1] && p[-1][0] && p[-1][1] && p[-1][2] && p[-1][3]) {
+                        for (var x = 0; x < 4; x++) {
+                            for (var y = 0; y < 4; y++) {
+                                predC[x][y].cr = (p[0][-1].cr + p[1][-1].cr + p[2][-1].cr + p[3][-1].cr + p[-1][0].cr + p[-1][1].cr + p[-1][2].cr + p[-1][3].cr + 4) >> 3;
+                                predC[x][y].cb = (p[0][-1].cb + p[1][-1].cb + p[2][-1].cb + p[3][-1].cb + p[-1][0].cb + p[-1][1].cb + p[-1][2].cb + p[-1][3].cb + 4) >> 3;
+                            }
+                        }
+                    } else if (p[0][-1] && p[1][-1] && p[2][-1] && p[3][-1] && (!p[-1][0] || !p[-1][1] || !p[-1][2] || !p[-1][3])) {
+                        for (var x = 0; x < 4; x++) {
+                            for (var y = 0; y < 4; y++) {
+                                predC[x][y].cr = (p[0][-1].cr + p[1][-1].cr + p[2][-1].cr + p[3][-1].cr + 2) >> 2;
+                                predC[x][y].cb = (p[0][-1].cb + p[1][-1].cb + p[2][-1].cb + p[3][-1].cb + 2) >> 2;
+                            }
+                        }
+                    } else if (p[-1][0] && p[-1][1] && p[-1][2] && p[-1][3] && (!p[0][-1] || !p[1][-1] || !p[2][-1] || !p[3][-1])) {
+                        for (var x = 0; x < 4; x++) {
+                            for (var y = 0; y < 4; y++) {
+                                predC[x][y].cr = (p[-1][0].cr + p[-1][1].cr + p[-1][2].cr + p[-1][3].cr + 2) >> 2;
+                                predC[x][y].cb = (p[-1][0].cb + p[-1][1].cb + p[-1][2].cb + p[-1][3].cb + 2) >> 2;
+                            }
+                        }
+                    } else {
+                        for (var x = 0; x < 4; x++) {
+                            for (var y = 0; y < 4; y++) {
+                                predC[x][y].cr = 128;
+                                predC[x][y].cb = 128;
+                            }
+                        }
+                    }
+
+                    if (p[4][-1] && p[5][-1] && p[6][-1] && p[7][-1]) {
+                        for (var x = 4; x < 8; x++) {
+                            for (var y = 0; y < 4; y++) {
+                                predC[x][y].cr = (p[4][-1].cr + p[5][-1].cr + p[6][-1].cr + p[7][-1].cr + 2) >> 2;
+                                predC[x][y].cb = (p[4][-1].cb + p[5][-1].cb + p[6][-1].cb + p[7][-1].cb + 2) >> 2;
+                            }
+                        }
+                    } else if (p[-1][0] && p[-1][1] && p[-1][2] && p[-1][3]) {
+                        for (var x = 4; x < 8; x++) {
+                            for (var y = 0; y < 4; y++) {
+                                predC[x][y].cr = (p[-1][0].cr + p[-1][1].cr + p[-1][2].cr + p[-1][3].cr + 2) >> 2;
+                                predC[x][y].cb = (p[-1][0].cb + p[-1][1].cb + p[-1][2].cb + p[-1][3].cb + 2) >> 2;
+                            }
+                        }
+                    } else {
+                        for (var x = 4; x < 8; x++) {
+                            for (var y = 0; y < 4; y++) {
+                                predC[x][y].cr = 128;
+                                predC[x][y].cb = 128;
+                            }
+                        }
+                    }
+
+                    if (p[-1][4] && p[-1][5] && p[-1][6] && p[-1][7]) {
+                        for (var x = 0; x < 4; x++) {
+                            for (var y = 4; y < 8; y++) {
+                                predC[x][y].cr = (p[-1][4].cr + p[-1][5].cr + p[-1][6].cr + p[-1][7].cr + 2) >> 2;
+                                predC[x][y].cb = (p[-1][4].cb + p[-1][5].cb + p[-1][6].cb + p[-1][7].cb + 2) >> 2;
+                            }
+                        }
+                    } else if (p[0][-1] && p[1][-1] && p[2][-1] && p[3][-1]) {
+                        for (var x = 0; x < 4; x++) {
+                            for (var y = 4; y < 8; y++) {
+                                predC[x][y].cr = (p[0][-1].cr + p[1][-1].cr + p[2][-1].cr + p[3][-1].cr + 2) >> 2;
+                                predC[x][y].cb = (p[0][-1].cb + p[1][-1].cb + p[2][-1].cb + p[3][-1].cb + 2) >> 2;
+                            }
+                        }
+                    } else {
+                        for (var x = 0; x < 4; x++) {
+                            for (var y = 4; y < 8; y++) {
+                                predC[x][y].cr = 128;
+                                predC[x][y].cb = 128;
+                            }
+                        }
+                    }
+
+                    if (p[4][-1] && p[5][-1] && p[6][-1] && p[7][-1] && p[-1][4] && p[-1][5] && p[-1][6] && p[-1][7]) {
+                        for (var x = 4; x < 8; x++) {
+                            for (var y = 4; y < 8; y++) {
+                                predC[x][y].cr = (p[4][-1].cr + p[5][-1].cr + p[6][-1].cr + p[7][-1].cr + p[-1][4].cr + p[-1][5].cr + p[-1][6].cr + p[-1][7].cr + 4) >> 3;
+                                predC[x][y].cb = (p[4][-1].cb + p[5][-1].cb + p[6][-1].cb + p[7][-1].cb + p[-1][4].cb + p[-1][5].cb + p[-1][6].cb + p[-1][7].cb + 4) >> 3;
+                            }
+                        }
+                    } else if (p[4][-1] && p[5][-1] && p[6][-1] && p[7][-1] && (!p[-1][4] || p[-1][5] || p[-1][6] || p[-1][7])) {
+                        for (var x = 4; x < 8; x++) {
+                            for (var y = 4; y < 8; y++) {
+                                predC[x][y].cr = (p[4][-1].cr + p[5][-1].cr + p[6][-1].cr + p[7][-1].cr + 2) >> 2;
+                                predC[x][y].cb = (p[4][-1].cb + p[5][-1].cb + p[6][-1].cb + p[7][-1].cb + 2) >> 2;
+                            }
+                        }
+                    } else if (p[-1][4] && p[-1][5] && p[-1][6] && p[-1][7] && (!p[4][-1] || !p[5][-1] || !p[6][-1] || !p[7][-1])) {
+                        for (var x = 4; x < 8; x++) {
+                            for (var y = 4; y < 8; y++) {
+                                predC[x][y].cr = (p[-1][4].cr + p[-1][5].cr + p[-1][6].cr + p[-1][7].cr + 2) >> 2;
+                                predC[x][y].cb = (p[-1][4].cb + p[-1][5].cb + p[-1][6].cb + p[-1][7].cb + 2) >> 2;
+                            }
+                        }
+                    } else {
+                        for (var x = 4; x < 8; x++) {
+                            for (var y = 4; y < 8; y++) {
+                                predC[x][y].cr = 128;
+                                predC[x][y].cb = 128;
+                            }
+                        }
+                    }
+                    break;
+                case _defs.INTRA_CHROMA_PRED_MODE_HORIZONTAL:
+                    if (p[-1][0] && p[-1][1] && p[-1][2] && p[-1][3] && p[-1][4] && p[-1][5] && p[-1][6] && p[-1][7]) {
+                        for (var x = 0; x < 8; x++) {
+                            for (var y = 0; y < 8; y++) {
+                                predC[x][y].cb = p[-1][y].cb;
+                                predC[x][y].cr = p[-1][y].cr;
+                            }
+                        }
+                    }
+                    break;
+                case _defs.INTRA_CHROMA_PRED_MODE_VERTICAL:
+                    if (p[0][-1] && p[1][-1] && p[2][-1] && p[3][-1] && p[4][-1] && p[5][-1] && p[6][-1] && p[7][-1]) {
+                        for (var x = 0; x < 8; x++) {
+                            for (var y = 0; y < 8; y++) {
+                                predC[x][y].cb = p[x][-1].cb;
+                                predC[x][y].cr = p[x][-1].cr;
+                            }
+                        }
+                    }
+                    break;
+                case _defs.INTRA_CHROMA_PRED_MODE_PLANE:
+                    if (p[-1][0] && p[-1][1] && p[-1][2] && p[-1][3] && p[-1][4] && p[-1][5] && p[-1][6] && p[-1][7] && p[0][-1] && p[1][-1] && p[2][-1] && p[3][-1] && p[4][-1] && p[5][-1] && p[6][-1] && p[7][-1]) {
+                        var a = {
+                            cb: 16 * (p[-1][7].cb + p[7][-1].cb),
+                            cr: 16 * (p[-1][7].cr + p[7][-1].cr),
+                        };
+                        var H = {
+                            cr: (p[4][-1].cr - p[2][-1].cr) + 2 * (p[5][-1].cr - p[1][-1].cr) + 3 * (p[6][-1].cr - p[0][-1].cr) + 4 * (p[7][-1].cr - p[-1][-1].cr),
+                            cb: (p[4][-1].cb - p[2][-1].cb) + 2 * (p[5][-1].cb - p[1][-1].cb) + 3 * (p[6][-1].cb - p[0][-1].cb) + 4 * (p[7][-1].cb - p[-1][-1].cb)
+                        };
+                        var V = {
+                            cr: (p[-1][4].cr - p[-1][2].cr) + 2 * (p[-1][5].cr - p[-1][1].cr) + 3 * (p[-1][6].cr - p[-1][0].cr) + 4 * (p[-1][7].cr - p[-1][-1].cr),
+                            cb: (p[-1][4].cb - p[-1][2].cb) + 2 * (p[-1][5].cb - p[-1][1].cb) + 3 * (p[-1][6].cb - p[-1][0].cb) + 4 * (p[-1][7].cb - p[-1][-1].cb),
+                        };
+                        var b = {
+                            cb: (17 * H.cb + 16) >> 5,
+                            cr: (17 * H.cr + 16) >> 5,
+                        };
+                        var c = {
+                            cb: (17 * V.cb + 16) >> 5,
+                            cr: (17 * V.cr + 16) >> 5,
+                        };
+
+                        for (var x = 0; x < 8; x++) {
+                            for (var y = 0; y < 8; y++) {
+
+                                predC[x][y].cb = _common.clip1((a.cb + b.cb * (x - 3) + c.cb * (y - 3) + 16) >> 5);
+                                predC[x][y].cr = _common.clip1((a.cr + b.cr * (x - 3) + c.cr * (y - 3) + 16) >> 5);
+                            }
+                        }
+                    }
+                    break;
             }
         },
         decode: function() {
@@ -1477,7 +1713,6 @@ define([
                         this.writeBlockToLuma(data, blk);
 
                     }
-
 
                 } else {
 
@@ -1884,14 +2119,8 @@ define([
                     }
 
                 }
-                /* save 3-dimensional array to yuv */
-                // for (var blk = 0; blk < 16; blk++) {
-                //     for (var i = 0; i < 4; i++) {
-                //         for (var j = 0; j < 4; j++) {
-                //             this.yuv[16 * (_defs.map4x4to16x16[blk] >> 2 + i) + (_defs.map4x4to16x16[blk] % 4) * 4 + j] = this.decoded.lumas[blk][i][j];
-                //         }
-                //     }
-                // }
+
+                this.intraChromaPredict();
             } else { /* P_MB */
                 this.interPrediction();
                 if (this.hasResidual) {

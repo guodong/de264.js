@@ -29,9 +29,9 @@ define(function() {
         Pred_L0: 2,
         Pred_Na: 3,
 
-        PRED_MODE_INTRA4x4: 0,
-        PRED_MODE_INTRA16x16: 1,
-        PRED_MODE_INTER: 2,
+        // PRED_MODE_INTRA4x4: 0,
+        // PRED_MODE_INTRA16x16: 1,
+        // PRED_MODE_INTER: 2,
 
         /* mb_type names of P mb */
         P_Skip: -1,
@@ -122,6 +122,12 @@ define(function() {
         Intra_16x16_Horizontal: 1,
         Intra_16x16_DC: 2,
         Intra_16x16_Plane: 3,
+
+        /* Intra Chroma Prediction Mode */
+        INTRA_CHROMA_PRED_MODE_DC: 0,
+        INTRA_CHROMA_PRED_MODE_HORIZONTAL: 1,
+        INTRA_CHROMA_PRED_MODE_VERTICAL: 2,
+        INTRA_CHROMA_PRED_MODE_PLANE: 3,
 
         /* array to block map */
         abmap: [
