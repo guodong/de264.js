@@ -466,6 +466,7 @@ define([
                             mb.sub_mb_type[0] = _defs.NA;
                             mb.mbPartWidth = 16;
                             mb.mbPartHeight = 16;
+                            mb.hasResidual = false;
                             mb.decode();
                             CurrMbAddr = NextMbAddress(CurrMbAddr);
                         }
@@ -489,6 +490,7 @@ define([
                     for (var j = 0; j < mb.rem_intra4x4_pred_mode.length; j++) {
                         mb.rem_intra4x4_pred_mode[j] = 0;
                     }
+                    mb.hasResidual = false;
 
                     /* parse bit stream */
                     mb.parse(this.qb);

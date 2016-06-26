@@ -119,7 +119,7 @@ define([
                     console.log(slice);
                     if (this.currMb === this.mbs[this.picSizeInMb - 1]) { /* end of pic */
                         this.writeCurrPic();
-                        this.filterPic();
+                        //this.filterPic();
                         var poc = {};
                         var picOrderCnt = slice.decodePOC(poc);
                         this.dpb.markDecRefPic(slice, nal.nal_unit_type === _defs.NAL_SLICE_IDR ? true : false, slice.frame_num, picOrderCnt);
