@@ -38,6 +38,15 @@ define([
                 this.currPic.data[i] = 128;
             }
         },
+        resetSample: function() {
+            this.SL = [];
+            this.SCb = [];
+            this.SCr = [];
+            for (var i = 0; i < this.picSize / 4; i++) {
+                this.SCb[i] = 128;
+                this.SCr[i] = 128;
+            }
+        },
         filterPic: function() {
             var mbidx = 0;
             for (var mbRow = 0, mbCol = 0; mbRow < this.currPic.heightInMb; mbidx++) {
@@ -116,12 +125,13 @@ define([
                     slice.parse();
                     console.log(slice);
                     if (this.currMb === this.mbs[this.picSizeInMb - 1]) { /* end of pic */
-                        this.writeCurrPic();
-                        this.filterPic();
+                        //this.writeCurrPic();
+                        //this.filterPic();
                         var poc = {};
                         var picOrderCnt = slice.decodePOC(poc);
                         this.dpb.markDecRefPic(slice, nal.nal_unit_type === _defs.NAL_SLICE_IDR ? true : false, slice.frame_num, picOrderCnt);
-                        _util.yuv2canvas(this.currPic.data, this.width, this.height, can);
+                        //_util.yuv2canvas(this.currPic.data, this.width, this.height, can);
+                        _util.yuv2rgb(this.SL, this.SCb, this.SCr, this.width, this.height, can);
                     }
                     break;
                 default:
@@ -219,6 +229,7 @@ define([
                     this.picSizeInMb = this.widthInMb * this.heightInMb;
                     this.picSize = this.picSizeInMb << 8;
                     this.resetCurrPic();
+                    this.resetSample();
                     this.initMbs();
                     this.initDpb();
                 }

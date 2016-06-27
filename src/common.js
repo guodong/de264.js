@@ -117,6 +117,13 @@ define([
             [list[9], list[10], list[14], list[15]]
         ];
     }
+
+    function inverse4x4LumaBlockScan(luma4x4BlkIdx) {
+        return {
+            x: inverseRasterScan(luma4x4BlkIdx >> 2, 8, 8, 16, 0) + inverseRasterScan(luma4x4BlkIdx % 4, 4, 4, 8, 0),
+            y: inverseRasterScan(luma4x4BlkIdx >> 2, 8, 8, 16, 1) + inverseRasterScan(luma4x4BlkIdx % 4, 4, 4, 8, 1)
+        };
+    }
     
     return {
         isISlice: isISlice,
@@ -131,6 +138,7 @@ define([
         clip3: clip3,
         clip1: clip1,
         medianFilter: medianFilter,
-        inverseScanTransformCoeff: inverseScanTransformCoeff
+        inverseScanTransformCoeff: inverseScanTransformCoeff,
+        inverse4x4LumaBlockScan: inverse4x4LumaBlockScan
     };
 });
