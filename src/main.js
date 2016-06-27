@@ -64,7 +64,7 @@ define([
                         }
                         this.mbs[mbidx].getLumaEdgeThresholds(thresholds, flags);
 
-                        this.mbs[mbidx].filterLuma(this.currPic.data, mbRow * this.widthInMb * 256 + mbCol * 16, bS, thresholds, this.widthInMb*16);
+                        this.mbs[mbidx].filterLuma(this.currPic.data, mbRow * this.widthInMb * 256 + mbCol * 16, bS, thresholds, this.widthInMb * 16);
 
                         /* chroma */
                         // GetChromaEdgeThresholds(thresholds, pMb, flags,
@@ -77,8 +77,7 @@ define([
                     }
                 }
                 mbCol++;
-                if (mbCol == this.widthInMb)
-                {
+                if (mbCol == this.widthInMb) {
                     mbCol = 0;
                     mbRow++;
                 }
@@ -143,8 +142,8 @@ define([
                 var x = (mbIdx % this.widthInMb) << 3;
                 for (var i = 0; i < 8; i++) {
                     for (var j = 0; j < 8; j++) {
-                        this.currPic.data[this.picSize + (y + i) * this.width/2 + x + j] = this.mbs[mbIdx].chroma[j][i].cb;
-                        this.currPic.data[this.picSize + this.picSize / 2 + (y + i) * this.width/2 + x + j] = this.mbs[mbIdx].chroma[j][i].cr;
+                        this.currPic.data[this.picSize + (y + i) * this.widthInMb * 8 + x + j] = this.mbs[mbIdx].chroma[j][i].cb;
+                        this.currPic.data[this.picSize + this.picSize / 4 + (y + i) * this.widthInMb * 8 + x + j] = this.mbs[mbIdx].chroma[j][i].cr;
                     }
                 }
             }
