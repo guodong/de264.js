@@ -23,8 +23,7 @@ define([
             }
             this.outBuf = new Array(16);
             for (var i = 0; i < 16; i++) {
-                this.outBuf[i] = {
-                };
+                this.outBuf[i] = {};
             }
             this.refPicList0 = this.images;
             this.dpbSize = this.maxRefFrames;
@@ -42,11 +41,9 @@ define([
 
             picOrderCnt = 0x7FFFFFFF;
 
-            for (i = 0; i <= this.dpbSize; i++)
-            {
+            for (i = 0; i <= this.dpbSize; i++) {
                 if (this.refPicList0[i].toBeDisplayed &&
-                    (this.refPicList0[i].picOrderCnt < picOrderCnt))
-                {
+                    (this.refPicList0[i].picOrderCnt < picOrderCnt)) {
                     tmp = this.refPicList0[i];
                     picOrderCnt = this.refPicList0[i].picOrderCnt;
                 }
@@ -82,21 +79,17 @@ define([
 
             /* Code */
 
-            if (isShortTerm)
-            {
-                while (i < this.maxRefFrames && !found)
-                {
+            if (isShortTerm) {
+                while (i < this.maxRefFrames && !found) {
                     if ((this.refPicList0[i].status === _defs.NON_EXIST || this.refPicList0[i].status === _defs.SHORT_TERM) &&
-                    this.refPicList0[i].picNum == picNum)
+                        this.refPicList0[i].picNum == picNum)
                         found = true;
                     else
                         i++;
                 }
             }
-            else
-            {
-                while (i < this.maxRefFrames && !found)
-                {
+            else {
+                while (i < this.maxRefFrames && !found) {
                     if (this.refPicList0[i].status === _defs.LONG_TERM &&
                         this.refPicList0[i].picNum == picNum)
                         found = true;
@@ -108,7 +101,7 @@ define([
             if (found)
                 return i;
             else
-            return -1;
+                return -1;
         },
         mmcop1: function(currPicNum, differenceOfPicNums) {
             var index, picNum;
@@ -117,7 +110,7 @@ define([
 
             index = this.findDpbPic(picNum, true);
             if (index < 0)
-                return(1);
+                return (1);
 
             this.refPicList0[index] = _defs.UNUSED;
             this.numRefFrames--;
@@ -143,22 +136,21 @@ define([
         mmcop3: function(currPicNum, differenceOfPicNums, longTermFrameIdx) {
             var index, picNum, i;
 
-            if ( (this.maxLongTermFrameIdx == 0xFFFF) ||
-                (longTermFrameIdx > this.maxLongTermFrameIdx) )
+            if ((this.maxLongTermFrameIdx == 0xFFFF) ||
+                (longTermFrameIdx > this.maxLongTermFrameIdx))
                 return 1;
 
             /* check if a long term picture with the same longTermFrameIdx already
              * exist and remove it if necessary */
             for (i = 0; i < this.maxRefFrames; i++)
                 if (this.refPicList0[i].status === _defs.LONG_TERM &&
-                    this.refPicList0[i].picNum == longTermFrameIdx)
-            {
-                this.refPicList0[i] = _defs.UNUSED;
-                this.numRefFrames--;
-                if (!this.refPicList0[i].toBeDisplayed)
-                    this.fullness--;
-                break;
-            }
+                    this.refPicList0[i].picNum == longTermFrameIdx) {
+                    this.refPicList0[i] = _defs.UNUSED;
+                    this.numRefFrames--;
+                    if (!this.refPicList0[i].toBeDisplayed)
+                        this.fullness--;
+                    break;
+                }
 
             picNum = currPicNum - differenceOfPicNums;
 
@@ -179,13 +171,12 @@ define([
             for (var i = 0; i < this.maxRefFrames; i++)
                 if (this.refPicList0[i] === _defs.LONG_TERM &&
                     ( (this.refPicList0[i].picNum > maxLongTermFrameIdx) ||
-            (this.maxLongTermFrameIdx == 0xFFFF) ) )
-            {
-                this.refPicList0[i] = _defs.UNUSED;
-                this.numRefFrames--;
-                if (!this.refPicList0[i].toBeDisplayed)
-                    this.fullness--;
-            }
+                    (this.maxLongTermFrameIdx == 0xFFFF) )) {
+                    this.refPicList0[i] = _defs.UNUSED;
+                    this.numRefFrames--;
+                    if (!this.refPicList0[i].toBeDisplayed)
+                        this.fullness--;
+                }
 
             return 0;
         },
@@ -208,29 +199,27 @@ define([
             this.prevRefFrameNum = 0;
         },
         mmcop6: function(frameNum, picOrderCnt, longTermFrameIdx) {
-            if ( (this.maxLongTermFrameIdx == 0xFFFF) ||
-                (longTermFrameIdx > this.maxLongTermFrameIdx) )
+            if ((this.maxLongTermFrameIdx == 0xFFFF) ||
+                (longTermFrameIdx > this.maxLongTermFrameIdx))
                 return 1;
 
             /* check if a long term picture with the same longTermFrameIdx already
              * exist and remove it if necessary */
             for (var i = 0; i < this.maxRefFrames; i++)
                 if (this.refPicList0[i].status === _defs.LONG_TERM &&
-                    this.refPicList0[i].picNum == longTermFrameIdx)
-            {
-                this.refPicList0[i] = _defs.UNUSED;
-                this.numRefFrames--;
-                if (!this.refPicList0[i].toBeDisplayed)
-                    this.fullness--;
-                break;
-            }
+                    this.refPicList0[i].picNum == longTermFrameIdx) {
+                    this.refPicList0[i] = _defs.UNUSED;
+                    this.numRefFrames--;
+                    if (!this.refPicList0[i].toBeDisplayed)
+                        this.fullness--;
+                    break;
+                }
 
-            if (this.numRefFrames < this.maxRefFrames)
-            {
+            if (this.numRefFrames < this.maxRefFrames) {
                 this.currentOut.frameNum = frameNum;
-                this.currentOut.picNum   = longTermFrameIdx;
+                this.currentOut.picNum = longTermFrameIdx;
                 this.currentOut.picOrderCnt = picOrderCnt;
-                this.currentOut.status   = _defs.LONG_TERM;
+                this.currentOut.status = _defs.LONG_TERM;
                 if (this.noReordering)
                     this.currentOut.toBeDisplayed = false;
                 else
@@ -247,24 +236,20 @@ define([
             var index, picNum;
             var i;
 
-            if (this.numRefFrames < this.maxRefFrames)
-            {
+            if (this.numRefFrames < this.maxRefFrames) {
                 return 0;
             }
-            else
-            {
+            else {
                 index = -1;
                 picNum = 0;
                 /* find the oldest short term picture */
                 for (i = 0; i < this.numRefFrames; i++)
                     if (this.refPicList0[i].status === _defs.NON_EXIST || this.refPicList0[i].status === _defs.SHORT_TERM)
-                        if (this.refPicList0[i].picNum < picNum || index == -1)
-                        {
+                        if (this.refPicList0[i].picNum < picNum || index == -1) {
                             index = i;
                             picNum = this.refPicList0[i].picNum;
                         }
-                if (index >= 0)
-                {
+                if (index >= 0) {
                     this.refPicList0[i].status = _defs.UNUSED;
                     this.numRefFrames--;
                     if (!this.refPicList0[index].toBeDisplayed)
@@ -283,47 +268,44 @@ define([
             pic2 = ptr2;
 
             /* both are non-reference pictures, check if needed for display */
-            if (!pic1.status && !pic2.status)
-            {
+            if (!pic1.status && !pic2.status) {
                 if (pic1.toBeDisplayed && !pic2.toBeDisplayed)
-                    return(-1);
+                    return (-1);
                 else if (!pic1.toBeDisplayed && pic2.toBeDisplayed)
-                    return(1);
+                    return (1);
                 else
-                    return(0);
+                    return (0);
             }
             /* only pic 1 needed for reference -> greater */
             else if (!pic2.status)
-            return(-1);
+                return (-1);
             /* only pic 2 needed for reference -> greater */
             else if (!pic1.status)
-            return(1);
+                return (1);
             /* both are short term reference pictures -> check picNum */
-            else if ((pic1.status === _defs.NON_EXIST || pic1.status === _defs.SHORT_TERM) && (pic2.status === _defs.NON_EXIST || pic2.status === _defs.SHORT_TERM))
-            {
+            else if ((pic1.status === _defs.NON_EXIST || pic1.status === _defs.SHORT_TERM) && (pic2.status === _defs.NON_EXIST || pic2.status === _defs.SHORT_TERM)) {
                 if (pic1.picNum > pic2.picNum)
-                    return(-1);
+                    return (-1);
                 else if (pic1.picNum < pic2.picNum)
-                    return(1);
+                    return (1);
                 else
-                    return(0);
+                    return (0);
             }
             /* only pic 1 is short term -> greater */
             else if ((pic1.status === _defs.NON_EXIST || pic1.status === _defs.SHORT_TERM))
-            return(-1);
+                return (-1);
             /* only pic 2 is short term -> greater */
             else if ((pic2.status === _defs.NON_EXIST || pic2.status === _defs.SHORT_TERM))
-            return(1);
+                return (1);
             /* both are long term reference pictures -> check picNum (contains the
              * longTermPicNum */
-            else
-            {
+            else {
                 if (pic1.picNum > pic2.picNum)
-                    return(1);
+                    return (1);
                 else if (pic1.picNum < pic2.picNum)
-                    return(-1);
+                    return (-1);
                 else
-                    return(0);
+                    return (0);
             }
         },
         sortPic: function() {
@@ -333,15 +315,12 @@ define([
 
             step = 7;
 
-            while (step)
-            {
-                for (var i = step; i < 17; i++)
-                {
+            while (step) {
+                for (var i = step; i < 17; i++) {
                     tmpPic = pPic[i];
                     var j = i;
-                    while (j >= step && this.comparePictures(pPic + j - step, tmpPic) > 0)
-                    {
-                        pPic[j] = pPic[j-step];
+                    while (j >= step && this.comparePictures(pPic + j - step, tmpPic) > 0) {
+                        pPic[j] = pPic[j - step];
                         j -= step;
                     }
                     pPic[j] = tmpPic;
@@ -353,7 +332,13 @@ define([
             var i, status;
             var markedAsLongTerm;
             var toBeDisplayed;
-            var image = this.decoder.currPic;
+            var image = {data: []};
+            for (var x = 0; x < this.decoder.width; x++) {
+                image.data[x] = [];
+                for (var y = 0; y < this.decoder.height; y++) {
+                    image.data[x][y] = this.decoder.SL[x][y];
+                }
+            }
             var dpb = this;
             dpb.currentOut = image;
 
@@ -363,8 +348,7 @@ define([
             toBeDisplayed = dpb.noReordering ? false : true;
 
             /* non-reference picture, stored for display reordering purposes */
-            if (!slice.nal.nal_ref_idc)
-            {
+            if (!slice.nal.nal_ref_idc) {
                 dpb.currentOut.status = _defs.UNUSED;
                 dpb.currentOut.frameNum = frameNum;
                 dpb.currentOut.picNum = frameNum;
@@ -374,8 +358,7 @@ define([
                     dpb.fullness++;
             }
             /* IDR picture */
-            else if (isIdr)
-            {
+            else if (isIdr) {
 
                 /* CheckGapsInFrameNum not called for IDR pictures . have to
                  * reset numOut and outIndex here */
@@ -385,40 +368,33 @@ define([
                 this.mmcop5();
                 /* if noOutputOfPriorPicsFlag was set . the pictures preceding the
                  * IDR picture shall not be output . set output buffer empty */
-                if (slice.no_output_of_prior_pics_flag || this.noReordering)
-                {
+                if (slice.no_output_of_prior_pics_flag || this.noReordering) {
                     dpb.numOut = 0;
                     dpb.outIndex = 0;
                 }
 
-                if (slice.long_term_reference_flag)
-                {
+                if (slice.long_term_reference_flag) {
                     dpb.currentOut.status = _defs.LONG_TERM;
                     dpb.maxLongTermFrameIdx = 0;
                 }
-                else
-                {
+                else {
                     dpb.currentOut.status = _defs.SHORT_TERM;
                     dpb.maxLongTermFrameIdx = 0xFFFF;
                 }
-                dpb.currentOut.frameNum  = 0;
-                dpb.currentOut.picNum    = 0;
+                dpb.currentOut.frameNum = 0;
+                dpb.currentOut.picNum = 0;
                 dpb.currentOut.picOrderCnt = 0;
                 dpb.currentOut.toBeDisplayed = toBeDisplayed;
                 dpb.fullness = 1;
                 dpb.numRefFrames = 1;
             }
             /* reference picture */
-            else
-            {
+            else {
                 markedAsLongTerm = false;
-                if (slice.adaptive_ref_pic_marking_mode_flag)
-                {
+                if (slice.adaptive_ref_pic_marking_mode_flag) {
                     i = 0;
-                    while (slice.operation[i].memory_management_control_operation)
-                    {
-                        switch (slice.operation[i].memory_management_control_operation)
-                        {
+                    while (slice.operation[i].memory_management_control_operation) {
+                        switch (slice.operation[i].memory_management_control_operation) {
                             case 1:
                                 status = this.mmcop1(
                                     frameNum,
@@ -430,7 +406,7 @@ define([
                                 break;
 
                             case 3:
-                                status =  this.mmcop3(
+                                status = this.mmcop3(
                                     frameNum,
                                     slice.operation[i].difference_of_pic_nums_minus1 + 1,
                                     slice.operation[i].long_term_frame_idx);
@@ -460,35 +436,30 @@ define([
                                 status = 1;
                                 break;
                         }
-                        if (status !== 0)
-                        {
+                        if (status !== 0) {
                             break;
                         }
                         i++;
                     }
                 }
-                else
-                {
+                else {
                     status = this.slidingWindowRefPicMarking();
                 }
                 /* if current picture was not marked as long-term reference by
                  * memory management control operation 6 . mark current as short
                  * term and insert it into dpb (if there is room) */
-                if (!markedAsLongTerm)
-                {
-                    if (dpb.numRefFrames < dpb.maxRefFrames)
-                    {
+                if (!markedAsLongTerm) {
+                    if (dpb.numRefFrames < dpb.maxRefFrames) {
                         dpb.currentOut.frameNum = frameNum;
-                        dpb.currentOut.picNum   = frameNum;
+                        dpb.currentOut.picNum = frameNum;
                         dpb.currentOut.picOrderCnt = picOrderCnt;
-                        dpb.currentOut.status   = _defs.SHORT_TERM;
+                        dpb.currentOut.status = _defs.SHORT_TERM;
                         dpb.currentOut.toBeDisplayed = toBeDisplayed;
                         dpb.fullness++;
                         dpb.numRefFrames++;
                     }
                     /* no room */
-                    else
-                    {
+                    else {
                         status = 1;
                     }
                 }
@@ -499,27 +470,24 @@ define([
 
             /* dpb was initialized to not to reorder the pictures . output current
              * picture immediately */
-            if (dpb.noReordering)
-            {
+            if (dpb.noReordering) {
                 // dpb.outBuf[dpb.numOut].data  = dpb.currentOut.data;
                 // dpb.outBuf[dpb.numOut].isIdr = dpb.currentOut.isIdr;
                 // dpb.outBuf[dpb.numOut].picId = dpb.currentOut.picId;
                 // dpb.numOut++;
             }
-            else
-            {
+            else {
                 /* output pictures if buffer full */
-                while (dpb.fullness > dpb.dpbSize)
-                {
+                while (dpb.fullness > dpb.dpbSize) {
                     this.outputPicture();
                 }
             }
 
             /* sort dpb */
-            this.refPicList0[16] = this.decoder.currPic;
+            this.refPicList0[16] = image;
             this.sortPic();
 
-            return(status);
+            return (status);
         },
         initRefPicList: function() {
 

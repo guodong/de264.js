@@ -124,6 +124,12 @@ define([
             y: inverseRasterScan(luma4x4BlkIdx >> 2, 8, 8, 16, 1) + inverseRasterScan(luma4x4BlkIdx % 4, 4, 4, 8, 1)
         };
     }
+    function inverseMbScan(mbaddr, width) {
+        return {
+            x: inverseRasterScan(mbaddr, 16, 16, width, 0),
+            y: inverseRasterScan(mbaddr, 16, 16, width, 1)
+        };
+    }
     
     return {
         isISlice: isISlice,
@@ -139,6 +145,7 @@ define([
         clip1: clip1,
         medianFilter: medianFilter,
         inverseScanTransformCoeff: inverseScanTransformCoeff,
-        inverse4x4LumaBlockScan: inverse4x4LumaBlockScan
+        inverse4x4LumaBlockScan: inverse4x4LumaBlockScan,
+        inverseMbScan: inverseMbScan
     };
 });

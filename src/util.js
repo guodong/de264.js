@@ -101,7 +101,7 @@ define(function() {
                 upos = (w >> 1) + (h >> 1) * width / 2 + uOffset;
                 vpos = (w >> 1) + (h >> 1) * width / 2 + vOffset;
 
-                Y = y[ypos];
+                Y = y[w][h];
                 U = u[upos] - 128;
                 V = v[vpos] - 128;
 

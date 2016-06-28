@@ -10,8 +10,9 @@ define([
     'de264/defs',
     'de264/macroblock_layer',
     'de264/dpb',
-    'de264/util'
-], function(_nal, _ringbuffer, _sps, _pps, _slice, _defs, _macroblock_layer, _dpb, _util) {
+    'de264/util',
+    'de264/filter'
+], function(_nal, _ringbuffer, _sps, _pps, _slice, _defs, _macroblock_layer, _dpb, _util, _filter) {
     var can = document.createElement('canvas');
     document.body.appendChild(can);
 
@@ -28,69 +29,66 @@ define([
     }
 
     Decoder.prototype = {
-        resetCurrPic: function() {
-            this.currPic = {
-                widthInMb: this.widthInMb,
-                heightInMb: this.heightInMb,
-                data: new Array(this.widthInMb * this.heightInMb * 384)
-            };
-            for (var i = 0; i < this.currPic.data.length; i++) {
-                this.currPic.data[i] = 128;
-            }
-        },
         resetSample: function() {
+            /* xy format */
             this.SL = [];
+            for (var x = 0; x < this.width; x++) {
+                this.SL[x] = [];
+            }
             this.SCb = [];
             this.SCr = [];
             for (var i = 0; i < this.picSize / 4; i++) {
                 this.SCb[i] = 128;
                 this.SCr[i] = 128;
             }
+            this.currPic = {data: this.SL};
         },
         filterPic: function() {
-            var mbidx = 0;
-            for (var mbRow = 0, mbCol = 0; mbRow < this.currPic.heightInMb; mbidx++) {
-                var flags = {
-                    filter_inner_edge: false,
-                    filter_left_edge: false,
-                    filter_top_edge: false
-                };
-                if (this.mbs[mbidx].disable_deblocking_filter_idc !== 1) {
-                    flags.filter_inner_edge = true;
-                    if (this.mbs[mbidx].mbA) {
-                        flags.filter_left_edge = true;
-                    }
-                    if (this.mbs[mbidx].mbB) {
-                        flags.filter_top_edge = true;
-                    }
-                }
-                if (flags.filter_inner_edge || flags.filter_left_edge || flags.filter_top_edge) {
-                    var bS = new Array(16);
-                    if (this.mbs[mbidx].getBoundaryStrengths(bS, flags)) {
-                        var thresholds = new Array(3);
-                        for (var i = 0; i < thresholds.length; i++) {
-                            thresholds[i] = {tc0: null, alpha: 0, beta: 0};
-                        }
-                        this.mbs[mbidx].getLumaEdgeThresholds(thresholds, flags);
-
-                        this.mbs[mbidx].filterLuma(this.currPic.data, mbRow * this.widthInMb * 256 + mbCol * 16, bS, thresholds, this.widthInMb * 16);
-
-                        /* chroma */
-                        // GetChromaEdgeThresholds(thresholds, pMb, flags,
-                        //     pMb->chromaQpIndexOffset);
-                        // data = image->data + picSizeInMbs * 256 +
-                        //     mbRow * picWidthInMbs * 64 + mbCol * 8;
-                        //
-                        // FilterChroma((u8*)data, data + 64*picSizeInMbs, bS,
-                        //     thresholds, picWidthInMbs*8);
-                    }
-                }
-                mbCol++;
-                if (mbCol == this.widthInMb) {
-                    mbCol = 0;
-                    mbRow++;
-                }
+            for (var i in this.mbs) {
+                this.mbs[i].filter();
             }
+            return;
+            
+            
+            //
+            // var mbidx = 0;
+            // for (var mbRow = 0, mbCol = 0; mbRow < this.heightInMb; mbidx++) {
+            //     var this.mbs[mbidx].getFilterFlags();
+            //     // if (flags.filter_left_edge) {
+            //     //     var xyE = [];
+            //     //     xyE[0] = [];
+            //     //     for (var k = 0; k < 16; k++) {
+            //     //         xyE[0][k] =
+            //     //     }
+            //     //     _filter.filterBlockEdges(this, mbidx, 0, 1, 1, 16);
+            //     // }
+            //     if (flags.filter_inner_edge || flags.filter_left_edge || flags.filter_top_edge) {
+            //         var bS = new Array(16);
+            //         if (this.mbs[mbidx].getBoundaryStrengths(bS, flags)) {
+            //             var thresholds = new Array(3);
+            //             for (var i = 0; i < thresholds.length; i++) {
+            //                 thresholds[i] = {tc0: null, alpha: 0, beta: 0};
+            //             }
+            //             this.mbs[mbidx].getLumaEdgeThresholds(thresholds, flags);
+            //
+            //             this.mbs[mbidx].filterLuma(this.SL, mbCol * 16, mbRow * 256, bS, thresholds, this.widthInMb * 16);
+            //
+            //             /* chroma */
+            //             // GetChromaEdgeThresholds(thresholds, pMb, flags,
+            //             //     pMb->chromaQpIndexOffset);
+            //             // data = image->data + picSizeInMbs * 256 +
+            //             //     mbRow * picWidthInMbs * 64 + mbCol * 8;
+            //             //
+            //             // FilterChroma((u8*)data, data + 64*picSizeInMbs, bS,
+            //             //     thresholds, picWidthInMbs*8);
+            //         }
+            //     }
+            //     mbCol++;
+            //     if (mbCol == this.widthInMb) {
+            //         mbCol = 0;
+            //         mbRow++;
+            //     }
+            // }
         },
         decodeNal: function(buf) {
             var dv = new DataView(buf);
@@ -126,7 +124,7 @@ define([
                     console.log(slice);
                     if (this.currMb === this.mbs[this.picSizeInMb - 1]) { /* end of pic */
                         //this.writeCurrPic();
-                        //this.filterPic();
+                        this.filterPic();
                         var poc = {};
                         var picOrderCnt = slice.decodePOC(poc);
                         this.dpb.markDecRefPic(slice, nal.nal_unit_type === _defs.NAL_SLICE_IDR ? true : false, slice.frame_num, picOrderCnt);
@@ -228,7 +226,6 @@ define([
                     this.height = this.heightInMb << 4;
                     this.picSizeInMb = this.widthInMb * this.heightInMb;
                     this.picSize = this.picSizeInMb << 8;
-                    this.resetCurrPic();
                     this.resetSample();
                     this.initMbs();
                     this.initDpb();
