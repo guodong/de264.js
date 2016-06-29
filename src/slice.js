@@ -484,6 +484,7 @@ define([
                             mb.mbPartWidth = 16;
                             mb.mbPartHeight = 16;
                             mb.hasResidual = false;
+                            mb.CodedBlockPattenLuma = 0;
                             mb.decode();
                             CurrMbAddr = NextMbAddress(CurrMbAddr);
                         }
